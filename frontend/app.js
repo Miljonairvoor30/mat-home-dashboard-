@@ -42,10 +42,15 @@
     $("visits").textContent=num.format(d.kpis?.visitsLatest||0);
     $("visitsSub").textContent=d.kpis?.latestMetricDate?`Laatste meetdag: ${shortDate(d.kpis.latestMetricDate)}`:"Nog geen bezoekdata";
     $("conversion").textContent=dec.format(d.kpis?.conversionLatest||0)+"%";
+    const performanceDate=d.productPerformanceDate||d.kpis?.latestMetricDate||null;
+    if(performanceDate){
+      $("productPerformanceTitle").textContent=`Productprestaties · ${shortDate(performanceDate)}`;
+      $("productOrdersHeader").textContent=`Orders · ${shortDate(performanceDate)}`;
+    }
     const series=d.visitsSeries||[], max=Math.max(1,...series.map(x=>x.visits||0));
     $("chart").innerHTML=series.length?series.map(x=>`<div class="bar-col"><div class="bar" style="height:${Math.max(3,Math.round((x.visits||0)/max*165))}px" title="${num.format(x.visits||0)} bezoeken"></div><div class="x">${esc(shortDate(x.date))}</div></div>`).join(""):'<div class="empty">Nog geen bezoekdata.</div>';
     $("recentOrders").innerHTML=(d.recentOrders||[]).length?(d.recentOrders||[]).map(o=>`<div class="row"><div class="dot"></div><div><b>Order ${esc(String(o.bol_order_id||o.orderId||"").slice(-6))} · ${euro.format(Number(o.total_amount||o.amount||0))}</b><p>${esc(time(o.ordered_at||o.time))}</p></div></div>`).join(""):'<div class="empty">Nog geen orders vandaag.</div>';
-    $("products").innerHTML=(d.products||[]).length?(d.products||[]).slice(0,25).map(p=>`<tr><td><b>${esc(p.variant||p.title||p.name)}</b><div class="hint">${esc(p.ean||"")}</div></td><td>${euro.format(Number(p.price||0))}</td><td>${num.format(p.stock||0)}</td><td>${num.format(p.visits||0)}</td><td>${num.format(p.ordersToday||0)}</td></tr>`).join(""):'<tr><td colspan="5" class="empty">Geen actieve producten.</td></tr>';
+    $("products").innerHTML=(d.products||[]).length?(d.products||[]).slice(0,25).map(p=>`<tr><td><b>${esc(p.variant||p.title||p.name)}</b><div class="hint">${esc(p.ean||"")}</div></td><td>${euro.format(Number(p.price||0))}</td><td>${num.format(p.stock||0)}</td><td>${num.format(p.visits||0)}</td><td>${num.format(p.ordersPerformance??p.ordersToday??0)}</td></tr>`).join(""):'<tr><td colspan="5" class="empty">Geen actieve producten.</td></tr>';
     $("competitors").innerHTML=(d.competitors||[]).length?(d.competitors||[]).map(x=>`<div class="row"><div class="dot warn"></div><div><b>${esc(x.competitor?.seller_name||x.competitor?.seller_id||"Concurrent")} · ${euro.format(Number(x.snapshot?.price||0))}</b><p>EAN ${esc(x.competitor?.ean||"")}${x.snapshot?.is_best_offer?" · beste aanbod":" · concurrent"}</p></div></div>`).join(""):'<div class="empty">Nog geen directe concurrent op dezelfde EAN gevonden.</div>';
     const ls=d.lastSync?.finished_at?dateTime(d.lastSync.finished_at):"onbekend";
     $("systemStatus").innerHTML=`<div class="row"><div class="dot"></div><div><b>${num.format(d.kpis?.activeProducts||0)} actieve producten</b><p>${num.format(d.kpis?.totalProducts||0)} producten bekend</p></div></div><div class="row"><div class="dot"></div><div><b>Bol API verbonden</b><p>Laatste sync: ${esc(ls)}</p></div></div><div class="row"><div class="dot"></div><div><b>Code onder eigen beheer</b><p>Frontend geschikt voor GitHub Pages</p></div></div>`;
