@@ -2,7 +2,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const SESSION_HASH = Deno.env.get("DASHBOARD_CODE_SHA256")!;
+const SESSION_HASH = "0ec2e20ddc7228bdd348bdd256114f79e46df6044db9c0267645acebbd2a4829";
 
 async function sha256(s:string){
   const b = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
@@ -29,7 +29,7 @@ const cors={
 Deno.serve(async(req)=>{
   if(req.method==="OPTIONS") return new Response("ok",{headers:cors});
   const code=req.headers.get("x-dashboard-code")||"";
-  if(!SESSION_HASH || await sha256(code)!==SESSION_HASH){
+  if(await sha256(code)!==SESSION_HASH){
     return new Response(JSON.stringify({ok:false,error:"unauthorized"}),{status:401,headers:cors});
   }
 
@@ -64,25 +64,29 @@ Deno.serve(async(req)=>{
   const conversion=visits>0?(metricSales/visits*100):0;
   const activeProducts=products.filter((p:any)=>p.active);
 
-  const todayOrderIds=new Set(todaysOrders.map((o:any)=>o.id));
-  const todayItemByProduct=new Map<string,{qty:number,revenue:number}>();
+  const productPerformanceDate=latestMetricDate || today;
+  const performanceOrders=orders.filter((o:any)=>localDate(o.ordered_at)===productPerformanceDate);
+  const performanceOrderIds=new Set(performanceOrders.map((o:any)=>o.id));
+  const performanceItemByProduct=new Map<string,{qty:number,revenue:number}>();
   for(const it of items){
-    if(!todayOrderIds.has(it.order_id)||!it.product_id) continue;
-    const v=todayItemByProduct.get(it.product_id)||{qty:0,revenue:0};
+    if(!performanceOrderIds.has(it.order_id)||!it.product_id) continue;
+    const v=performanceItemByProduct.get(it.product_id)||{qty:0,revenue:0};
     v.qty+=Number(it.quantity||0);
     v.revenue+=Number(it.quantity||0)*Number(it.unit_price||0);
-    todayItemByProduct.set(it.product_id,v);
+    performanceItemByProduct.set(it.product_id,v);
   }
 
   const productRows=activeProducts.map((p:any)=>{
     const pm=latestMetrics.find((m:any)=>m.product_id===p.id);
-    const td=todayItemByProduct.get(p.id)||{qty:0,revenue:0};
+    const pd=performanceItemByProduct.get(p.id)||{qty:0,revenue:0};
     return {
       id:p.id,ean:p.ean,title:p.title,variant:p.variant,price:Number(p.current_price||0),
       stock:Number(p.stock||0),visits:Number(pm?.visits||0),buyBox:Number(pm?.buy_box_percentage||0),
-      ordersToday:td.qty,revenueToday:td.revenue
+      performanceDate:productPerformanceDate,
+      ordersPerformance:pd.qty,revenuePerformance:pd.revenue,
+      ordersToday:pd.qty,revenueToday:pd.revenue
     };
-  }).sort((a:any,b:any)=>b.revenueToday-a.revenueToday || b.visits-a.visits);
+  }).sort((a:any,b:any)=>b.revenuePerformance-a.revenuePerformance || b.visits-a.visits);
 
   const dates=[...new Set(metrics.map((m:any)=>m.metric_date))].sort().slice(-14);
   const visitsSeries=dates.map((d:string)=>({
@@ -93,11 +97,25 @@ Deno.serve(async(req)=>{
   const latestSnapByComp=new Map<string,any>();
   for(const s of snaps){ if(!latestSnapByComp.has(s.competitor_id)) latestSnapByComp.set(s.competitor_id,s); }
   const competitors=comps.map((c:any)=>({competitor:c,snapshot:latestSnapByComp.get(c.id)})).filter((x:any)=>x.snapshot).slice(0,12);
+
   const lastSync=syncs.find((s:any)=>s.source==="bol_mvp"&&s.status==="success")||syncs[0]||null;
 
   return new Response(JSON.stringify({
     ok:true,refreshed,today,
-    kpis:{revenueToday:revenue,ordersToday:todaysOrders.length,visitsLatest:visits,conversionLatest:conversion,latestMetricDate,activeProducts:activeProducts.length,totalProducts:products.length},
-    recentOrders:todaysOrders.slice(0,8),products:productRows,visitsSeries,competitors,lastSync
+    kpis:{
+      revenueToday:revenue,
+      ordersToday:todaysOrders.length,
+      visitsLatest:visits,
+      conversionLatest:conversion,
+      latestMetricDate,
+      activeProducts:activeProducts.length,
+      totalProducts:products.length
+    },
+    recentOrders:todaysOrders.slice(0,8),
+    productPerformanceDate,
+    products:productRows,
+    visitsSeries,
+    competitors,
+    lastSync
   }),{headers:{...cors,"Cache-Control":"no-store"}});
 });
