@@ -1,0 +1,12 @@
+project_id = "mat-home-dashboard"
+
+[functions.bol-connection-test]
+verify_jwt = true
+[functions.bol-sync-orders]
+verify_jwt = true
+[functions.bol-sync-mvp]
+verify_jwt = true
+[functions.mat-home-dashboard-api]
+verify_jwt = false
+[functions.competitor-sales-api]
+verify_jwt = false

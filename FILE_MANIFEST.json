@@ -1,0 +1,102 @@
+[
+  {
+    "path": ".env.example",
+    "bytes": 146,
+    "sha256": "3c1ccdec09bed06630395e0f2700554dfecad124045f9beb39ec3c22d5f99457"
+  },
+  {
+    "path": ".github/workflows/pages.yml",
+    "bytes": 703,
+    "sha256": "cfd84d96fb339383765e3e226a4ffd0370df51141b516e48781255cbe9df88cc"
+  },
+  {
+    "path": ".gitignore",
+    "bytes": 72,
+    "sha256": "74775b79a5753060e0cca26c95ffe88c48b74b8fe927ce902d2013afcbbf9d4b"
+  },
+  {
+    "path": "README.md",
+    "bytes": 1930,
+    "sha256": "a13f5654344a8ac46d3192f9fddcbf0090ca4ff3ad90ebdafcee8d78cc588cb2"
+  },
+  {
+    "path": "docs/ARCHITECTURE.md",
+    "bytes": 446,
+    "sha256": "89132f546a58075a1184fb6e587852fd31a311f46480daefec9e5d2bf2feefcd"
+  },
+  {
+    "path": "docs/LOVABLE-MIGRATION.md",
+    "bytes": 375,
+    "sha256": "faad22759129c817fffedc629bb4a294892af645314407f6894ed6c0bfeff838"
+  },
+  {
+    "path": "docs/SECURITY.md",
+    "bytes": 603,
+    "sha256": "cb31802f12b86f6fd4dd8e6f9710d0e728c218ed4e81a7e223e47803bff37e76"
+  },
+  {
+    "path": "frontend/app.js",
+    "bytes": 9201,
+    "sha256": "847c4e0754dd21d7d512ee59bb69b595041972e39670dffb9336a6ce67b0fe4c"
+  },
+  {
+    "path": "frontend/config.js",
+    "bytes": 225,
+    "sha256": "0a8e0732fe34624d9d5b602e97cff6248b540375ac4470b1c0f516477c64a2e2"
+  },
+  {
+    "path": "frontend/index.html",
+    "bytes": 4723,
+    "sha256": "14601e95d1d9a5af0f5dc7178aedea1f781ee7991de2390bb6380853dc4e25b3"
+  },
+  {
+    "path": "frontend/styles.css",
+    "bytes": 5829,
+    "sha256": "72f5979b64a4347e0004f3165d18ea54b8dbe3296a163f962944e285762c8cbb"
+  },
+  {
+    "path": "supabase/config.toml",
+    "bytes": 280,
+    "sha256": "e963e6184efedc59772f416d181eea064f47ebe1cf3b178e9df0a6eb734ebfa7"
+  },
+  {
+    "path": "supabase/functions/README.md",
+    "bytes": 471,
+    "sha256": "c7165bea9289c676e66ae2f17b60ea383f8e022e2b3b484839dc4c4f200fdd6f"
+  },
+  {
+    "path": "supabase/functions/bol-connection-test/index.ts",
+    "bytes": 1465,
+    "sha256": "872b39946be3bd104e5da184503177287f107c538c926a71c00dd133ad20fdcc"
+  },
+  {
+    "path": "supabase/functions/bol-sync-mvp/index.ts",
+    "bytes": 8988,
+    "sha256": "716645aebff09af62d449eea316914b519fba0af163a38b5e44d6fe5e6bbe03c"
+  },
+  {
+    "path": "supabase/functions/bol-sync-orders/index.ts",
+    "bytes": 3777,
+    "sha256": "047ec43d1b54d238183e36ec667725007ee0496e3a2d992e55e300c56bf4191d"
+  },
+  {
+    "path": "supabase/functions/competitor-sales-api/index.ts",
+    "bytes": 5330,
+    "sha256": "f7d90ad3e797d8d68854a8d184ed20bed17193e283f53b334271e43c3d9520fe"
+  },
+  {
+    "path": "supabase/functions/mat-home-dashboard-api/index.ts",
+    "bytes": 5277,
+    "sha256": "40027fd24c3562befda46f4142c705b54e947eada8d781a35a90f5b0f6c4924d"
+  },
+  {
+    "path": "supabase/migrations/202609210001_initial_mat_home.sql",
+    "bytes": 7880,
+    "sha256": "45213e955d117621dd385d21424dd0d1880e9821f83ab421b8f0331a9111304d"
+  },
+  {
+    "path": "supabase/seed.sql",
+    "bytes": 345,
+    "sha256": "d7b4e2fd96ed68d40e537319802b72e55d3effc008cc983a110d58a5f00a6577"
+  }
+]

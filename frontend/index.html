@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#f5f3ef">
+  <meta name="robots" content="noindex,nofollow">
+  <title>MAT Home Dashboard</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div id="login" class="login-screen">
+    <form id="loginForm" class="login-card">
+      <div class="logo">MH</div>
+      <h1>MAT Home</h1>
+      <p>Privé dashboard voor je bol.com-business.</p>
+      <input id="code" type="password" autocomplete="current-password" placeholder="Dashboardcode" required>
+      <button type="submit" class="btn primary full">Open dashboard</button>
+      <div id="loginError" class="error hidden">Dashboardcode niet correct.</div>
+    </form>
+  </div>
+
+  <div id="app" class="hidden">
+    <main class="wrap">
+      <header class="top">
+        <div class="brand">
+          <div class="logo small">MH</div>
+          <div><h1>MAT Home Dashboard</h1><div class="sub">Bol.com · bedrijfsbeeld</div></div>
+        </div>
+        <div class="actions">
+          <button id="logout" class="btn">Uitloggen</button>
+          <button id="refresh" class="btn primary">↻ Ververs Bol-data</button>
+        </div>
+      </header>
+
+      <div id="statusBanner" class="banner hidden"></div>
+
+      <section class="kpis">
+        <article class="card"><div class="label">Omzet vandaag</div><div id="revenue" class="value">—</div><div id="revenueSub" class="hint"></div></article>
+        <article class="card"><div class="label">Orders vandaag</div><div id="orders" class="value">—</div><div class="hint">Retailer API</div></article>
+        <article class="card"><div class="label">Bezoeken</div><div id="visits" class="value">—</div><div id="visitsSub" class="hint"></div></article>
+        <article class="card"><div class="label">Conversie</div><div id="conversion" class="value">—</div><div class="hint">MVP-berekening</div></article>
+      </section>
+
+      <section class="two-col">
+        <article class="card"><h2>Productbezoeken · laatste 14 meetdagen</h2><div id="chart" class="chart"></div></article>
+        <article class="card"><h2>Vandaag</h2><div id="recentOrders"></div></article>
+      </section>
+
+      <section class="card">
+        <h2>Productprestaties</h2>
+        <div class="table-scroll"><table><thead><tr><th>Product</th><th>Prijs</th><th>Voorraad</th><th>Bezoeken*</th><th>Orders vandaag</th></tr></thead><tbody id="products"></tbody></table></div>
+      </section>
+
+      <section class="card">
+        <div class="section-head">
+          <div><h2>Concurrent sales <span class="soft">(schatting)</span></h2><p class="section-sub">Geschat op basis van gemeten voorraadmutaties.</p></div>
+          <button id="toggleAddCompetitor" class="btn">+ Concurrent toevoegen</button>
+        </div>
+        <div id="addCompetitorForm" class="form-box hidden">
+          <div class="form-grid">
+            <input id="compName" placeholder="Naam *">
+            <input id="compUrl" placeholder="Bol.com product-URL *">
+            <input id="compSeller" placeholder="Verkopernaam (optioneel)">
+            <input id="compEan" placeholder="EAN (optioneel)" inputmode="numeric">
+          </div>
+          <button id="saveCompetitor" class="btn primary">Toevoegen</button>
+          <div id="compFormMsg" class="hint"></div>
+        </div>
+        <div class="mini-kpis">
+          <div class="mini"><span>Geschat 24u</span><strong id="comp24">—</strong></div>
+          <div class="mini"><span>Geschat 7 dagen</span><strong id="comp7">—</strong></div>
+          <div class="mini"><span>Gevolgd</span><strong id="compCount">—</strong></div>
+        </div>
+        <details class="details"><summary>Hoe wordt dit geschat?</summary><p>Dit zijn geschatte sales op basis van voorraadmutaties. Een daling in gemeten voorraad telt als verkoopschatting. Aanvullingen, retouren, correcties en andere voorraadwijzigingen kunnen de uitkomst beïnvloeden; dit zijn geen officiële verkoopcijfers van bol.com.</p></details>
+        <div id="competitorSales" class="competitor-grid"></div>
+      </section>
+
+      <section class="two-col">
+        <article class="card"><h2>Concurrentie · zelfde EAN</h2><div id="competitors"></div></article>
+        <article class="card"><h2>Status</h2><div id="systemStatus"></div></article>
+      </section>
+
+      <footer>* Bol publiceert bezoekdata niet seconde-tot-seconde. Het dashboard gebruikt de laatst beschikbare meetdag. Klantnamen en adressen worden niet getoond.</footer>
+    </main>
+  </div>
+  <script src="./config.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>
