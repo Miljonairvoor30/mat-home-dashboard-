@@ -35,6 +35,29 @@
 
       <div id="statusBanner" class="banner hidden"></div>
 
+      <section class="period-panel">
+        <div>
+          <b>Dashboardperiode</b>
+          <span>Omzet, orders, bezoeken en conversie</span>
+        </div>
+        <div class="period-controls">
+          <select id="overviewPreset">
+            <option value="today">Vandaag</option>
+            <option value="yesterday">Gisteren</option>
+            <option value="7d">Laatste 7 dagen</option>
+            <option value="30d">Laatste 30 dagen</option>
+            <option value="month">Deze maand</option>
+            <option value="custom">Aangepast</option>
+          </select>
+          <div id="overviewCustom" class="date-range hidden">
+            <input id="overviewFrom" type="date" aria-label="Van datum">
+            <span>t/m</span>
+            <input id="overviewTo" type="date" aria-label="Tot datum">
+          </div>
+          <button id="applyOverviewPeriod" class="btn">Toepassen</button>
+        </div>
+      </section>
+
       <section class="kpis">
         <article class="card"><div class="label">Omzet vandaag</div><div id="revenue" class="value">—</div><div id="revenueSub" class="hint"></div></article>
         <article class="card"><div class="label">Orders vandaag</div><div id="orders" class="value">—</div><div class="hint">Retailer API</div></article>
@@ -48,7 +71,27 @@
       </section>
 
       <section class="card">
-        <h2 id="productPerformanceTitle">Productprestaties · gisteren</h2>
+        <div class="section-head filter-head">
+          <div>
+            <h2 id="productPerformanceTitle">Productprestaties · laatste meetdag</h2>
+            <p class="section-sub">Vergelijk bezoeken en orders binnen exact dezelfde periode.</p>
+          </div>
+          <div class="period-controls compact">
+            <select id="productPreset">
+              <option value="latest">Laatste meetdag</option>
+              <option value="yesterday">Gisteren</option>
+              <option value="7d">Laatste 7 dagen</option>
+              <option value="30d">Laatste 30 dagen</option>
+              <option value="custom">Aangepast</option>
+            </select>
+            <div id="productCustom" class="date-range hidden">
+              <input id="productFrom" type="date" aria-label="Productprestaties van datum">
+              <span>t/m</span>
+              <input id="productTo" type="date" aria-label="Productprestaties tot datum">
+            </div>
+            <button id="applyProductPeriod" class="btn">Toepassen</button>
+          </div>
+        </div>
         <div class="table-scroll"><table><thead><tr><th>Product</th><th>Prijs</th><th>Voorraad</th><th>Bezoeken*</th><th id="productOrdersHeader">Orders gisteren</th></tr></thead><tbody id="products"></tbody></table></div>
       </section>
 
@@ -56,6 +99,20 @@
         <div class="section-head">
           <div><h2>Concurrent sales <span class="soft">(schatting)</span></h2><p class="section-sub">Geschat op basis van gemeten voorraadmutaties.</p></div>
           <button id="toggleAddCompetitor" class="btn">+ Concurrent toevoegen</button>
+        </div>
+        <div class="period-controls comp-filter">
+          <select id="competitorPreset">
+            <option value="24h">Laatste 24 uur</option>
+            <option value="7d" selected>Laatste 7 dagen</option>
+            <option value="30d">Laatste 30 dagen</option>
+            <option value="custom">Aangepast</option>
+          </select>
+          <div id="competitorCustom" class="date-range hidden">
+            <input id="competitorFrom" type="date" aria-label="Concurrentie van datum">
+            <span>t/m</span>
+            <input id="competitorTo" type="date" aria-label="Concurrentie tot datum">
+          </div>
+          <button id="applyCompetitorPeriod" class="btn">Toepassen</button>
         </div>
         <div id="addCompetitorForm" class="form-box hidden">
           <div class="form-grid">
@@ -68,8 +125,8 @@
           <div id="compFormMsg" class="hint"></div>
         </div>
         <div class="mini-kpis">
-          <div class="mini"><span>Geschat 24u</span><strong id="comp24">—</strong></div>
-          <div class="mini"><span>Geschat 7 dagen</span><strong id="comp7">—</strong></div>
+          <div class="mini"><span id="compRangeLabel">Geschat geselecteerde periode</span><strong id="comp24">—</strong></div>
+          <div class="mini"><span>Geschat gemiddeld / dag</span><strong id="comp7">—</strong></div>
           <div class="mini"><span>Gevolgd</span><strong id="compCount">—</strong></div>
         </div>
         <details class="details"><summary>Hoe wordt dit geschat?</summary><p>Dit zijn geschatte sales op basis van voorraadmutaties. Een daling in gemeten voorraad telt als verkoopschatting. Aanvullingen, retouren, correcties en andere voorraadwijzigingen kunnen de uitkomst beïnvloeden; dit zijn geen officiële verkoopcijfers van bol.com.</p></details>
