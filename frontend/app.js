@@ -66,8 +66,10 @@
     $("visits").textContent=num.format(d.kpis?.visitsLatest||0);
     $("visitsSub").textContent=filtered?`Periode: ${label}`:(d.kpis?.latestMetricDate?`Laatste meetdag: ${shortDate(d.kpis.latestMetricDate)}`:"Nog geen bezoekdata");
     $("conversion").textContent=dec.format(d.kpis?.conversionLatest||0)+"%";
-    const series=d.visitsSeries||[],max=Math.max(1,...series.map(x=>x.visits||0));
-    $("chart").innerHTML=series.length?series.map(x=>`<div class="bar-col"><div class="bar" style="height:${Math.max(3,Math.round((x.visits||0)/max*165))}px" title="${num.format(x.visits||0)} bezoeken"></div><div class="x">${esc(shortDate(x.date))}</div></div>`).join(""):'<div class="empty">Geen bezoekdata voor deze periode.</div>';
+    const series=d.ordersSeries||[],max=Math.max(1,...series.map(x=>x.orders||0));
+    const chartRange=d.ordersSeriesRange;
+    $("ordersChartTitle").textContent=`Bestellingen per dag · ${chartRange?periodLabel(chartRange.from,chartRange.to):label}`;
+    $("chart").innerHTML=series.length?series.map(x=>`<div class="bar-col"><div class="bar" style="min-height:0;height:${Math.round((x.orders||0)/max*165)}px" title="${esc(shortDate(x.date))}: ${num.format(x.orders||0)} ${x.orders===1?"bestelling":"bestellingen"}"></div><div class="x">${esc(shortDate(x.date))}</div></div>`).join(""):'<div class="empty">Geen besteldata voor deze periode.</div>';
     $("recentOrders").innerHTML=(d.recentOrders||[]).length?(d.recentOrders||[]).map(o=>`<div class="row"><div class="dot"></div><div><b>Order ${esc(String(o.bol_order_id||o.orderId||"").slice(-6))} · ${euro.format(Number(o.total_amount||o.amount||0))}</b><p>${esc(shortDate(String(o.ordered_at||"").slice(0,10)))} · ${esc(time(o.ordered_at||o.time))}</p></div></div>`).join(""):'<div class="empty">Geen orders in deze periode.</div>';
     const ls=d.lastSync?.finished_at?dateTime(d.lastSync.finished_at):"onbekend";
     $("competitors").innerHTML=(d.competitors||[]).length?(d.competitors||[]).map(x=>`<div class="row"><div class="dot warn"></div><div><b>${esc(x.competitor?.seller_name||x.competitor?.seller_id||"Concurrent")} · ${euro.format(Number(x.snapshot?.price||0))}</b><p>EAN ${esc(x.competitor?.ean||"")}${x.snapshot?.is_best_offer?" · beste aanbod":" · concurrent"}</p></div></div>`).join(""):'<div class="empty">Nog geen directe concurrent op dezelfde EAN gevonden.</div>';

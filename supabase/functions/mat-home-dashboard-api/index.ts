@@ -23,6 +23,30 @@ function inRange(date:string,from:string,to:string){return date>=from&&date<=to;
 function daysBetween(from:string,to:string){
   return Math.max(1,Math.round((Date.parse(to+"T12:00:00Z")-Date.parse(from+"T12:00:00Z"))/86400000)+1);
 }
+function shiftDate(date:string,days:number){
+  const d=new Date(date+"T12:00:00Z");
+  d.setUTCDate(d.getUTCDate()+days);
+  return d.toISOString().slice(0,10);
+}
+async function dailyOrders(from:string,to:string){
+  const counts=new Map<string,number>();
+  // Include the UTC boundary around Amsterdam midnight, then filter by local date.
+  const query=`orders?select=id,ordered_at&ordered_at=gte.${shiftDate(from,-1)}T00:00:00Z&ordered_at=lt.${shiftDate(to,1)}T00:00:00Z&order=ordered_at.asc,id.asc`;
+  let offset=0;
+  while(true){
+    const page=await api(`${query}&limit=1000&offset=${offset}`);
+    if(!page.length) break;
+    for(const order of page){
+      const date=localDate(order.ordered_at);
+      if(inRange(date,from,to)) counts.set(date,(counts.get(date)||0)+1);
+    }
+    offset+=page.length;
+  }
+  return Array.from({length:daysBetween(from,to)},(_,i)=>{
+    const date=shiftDate(from,i);
+    return {date,orders:counts.get(date)||0};
+  });
+}
 const cors={
   "Access-Control-Allow-Origin":"*",
   "Access-Control-Allow-Headers":"content-type,x-dashboard-code",
@@ -108,6 +132,8 @@ Deno.serve(async(req)=>{
     date:d,
     visits:metrics.filter((m:any)=>m.metric_date===d).reduce((s:number,m:any)=>s+Number(m.visits||0),0)
   }));
+  const ordersSeriesRange={from:hasRange?from:shiftDate(today,-13),to:hasRange?to:today};
+  const ordersSeries=await dailyOrders(ordersSeriesRange.from,ordersSeriesRange.to);
 
   const latestSnapByComp=new Map<string,any>();
   for(const s of snaps) if(!latestSnapByComp.has(s.competitor_id)) latestSnapByComp.set(s.competitor_id,s);
@@ -125,6 +151,6 @@ Deno.serve(async(req)=>{
     recentOrders:rangeOrders.slice(0,20),
     productPerformanceDate:performanceFrom===performanceTo?performanceFrom:null,
     productPerformanceRange:{from:performanceFrom,to:performanceTo},
-    products:productRows,visitsSeries,competitors,lastSync
+    products:productRows,visitsSeries,ordersSeries,ordersSeriesRange,competitors,lastSync
   }),{headers:{...cors,"Cache-Control":"no-store"}});
 });
