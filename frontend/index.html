@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#edf2f8">
   <meta name="robots" content="noindex,nofollow">
   <title>MAT Home Dashboard</title>
-  <link rel="stylesheet" href="./styles.css?v=arctic-cobalt-1">
+  <link rel="stylesheet" href="./styles.css?v=insights-1">
 </head>
 <body>
   <div id="login" class="login-screen">
@@ -65,8 +65,36 @@
         <article class="card"><div class="label">Conversie</div><div id="conversion" class="value">—</div><div class="hint">MVP-berekening</div></article>
       </section>
 
+      <section class="card insight-card">
+        <div class="insight-top">
+          <div>
+            <div class="eyebrow">MAT HOME UPDATE</div>
+            <h2>Waar staan we & waar ligt winst?</h2>
+            <p id="insightPeriod" class="section-sub">Analyse wordt geladen…</p>
+          </div>
+          <div id="insightGenerated" class="insight-updated"></div>
+        </div>
+        <div id="insightHero" class="insight-hero"></div>
+        <div class="insight-kpis">
+          <div class="insight-stat"><span>Sales · 7d</span><strong id="insightSales">—</strong><small id="insightSalesSub"></small></div>
+          <div class="insight-stat"><span>Omzet · 7d</span><strong id="insightRevenue">—</strong><small id="insightRevenueSub"></small></div>
+          <div class="insight-stat"><span>Bezoeken · 7d</span><strong id="insightVisits">—</strong><small id="insightVisitsSub"></small></div>
+          <div class="insight-stat"><span>Conversie · 7d</span><strong id="insightConversion">—</strong><small id="insightConversionSub"></small></div>
+        </div>
+        <div class="insight-body">
+          <div>
+            <h3>Opvallend & actie</h3>
+            <div id="insightActions" class="insight-actions"></div>
+          </div>
+          <div>
+            <h3>Zoekvolume op bol</h3>
+            <div id="searchVolumeBox" class="search-volume-box"><div class="empty">Zoekvolume wordt geladen…</div></div>
+          </div>
+        </div>
+      </section>
+
       <section class="two-col">
-        <article class="card"><h2 id="ordersChartTitle">Bestellingen per dag · laatste 14 dagen</h2><div id="chart" class="chart"></div></article>
+        <article class="card"><div class="chart-head"><div><h2 id="ordersChartTitle">Bestellingen per dag · laatste 14 dagen</h2><p class="section-sub">Hover of tik op een dag voor sales en omzet.</p></div></div><div id="chart" class="chart"></div></article>
         <article class="card"><h2>Vandaag</h2><div id="recentOrders"></div></article>
       </section>
 
@@ -143,6 +171,6 @@
     </main>
   </div>
   <script src="./config.js"></script>
-  <script src="./app.js?v=daily-orders-1"></script>
+  <script src="./app.js?v=insights-1"></script>
 </body>
 </html>
