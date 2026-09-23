@@ -49,7 +49,7 @@
     try{
       const d=await request(withRange(API,null,refresh));
       latestMetricDate=d.kpis?.latestMetricDate||null;
-      renderOverview(d,false);renderProducts(d);showApp();
+      renderOverview(d,false);renderProducts(d);renderBusinessInsights(d);showApp();
       if(refresh){banner.textContent=d.refreshed?"Bol-data is opnieuw gesynchroniseerd.":"Dashboard geladen; sync gaf geen bevestiging.";setTimeout(()=>banner.classList.add("hidden"),2800)}
     }catch(e){if(e.message!=="unauthorized"){banner.classList.remove("hidden");banner.textContent="Kon dashboarddata niet laden."}}
     finally{$("refresh").disabled=false}
@@ -69,11 +69,59 @@
     const series=d.ordersSeries||[],max=Math.max(1,...series.map(x=>x.orders||0));
     const chartRange=d.ordersSeriesRange;
     $("ordersChartTitle").textContent=`Bestellingen per dag · ${chartRange?periodLabel(chartRange.from,chartRange.to):label}`;
-    $("chart").innerHTML=series.length?series.map(x=>`<div class="bar-col"><div class="bar" style="min-height:0;height:${Math.round((x.orders||0)/max*165)}px" title="${esc(shortDate(x.date))}: ${num.format(x.orders||0)} ${x.orders===1?"bestelling":"bestellingen"}"></div><div class="x">${esc(shortDate(x.date))}</div></div>`).join(""):'<div class="empty">Geen besteldata voor deze periode.</div>';
+    $("chart").innerHTML=series.length?series.map(x=>`<div class="bar-col" tabindex="0" aria-label="${esc(shortDate(x.date))}: ${num.format(x.orders||0)} bestellingen, ${esc(euro.format(Number(x.revenue||0)))} omzet"><div class="chart-tip"><b>${esc(shortDate(x.date))}</b><span>${num.format(x.orders||0)} ${x.orders===1?"bestelling":"bestellingen"}</span><span>${esc(euro.format(Number(x.revenue||0)))} omzet</span></div><div class="bar" style="min-height:0;height:${Math.round((x.orders||0)/max*165)}px"></div><div class="x">${esc(shortDate(x.date))}</div></div>`).join(""):'<div class="empty">Geen besteldata voor deze periode.</div>';
     $("recentOrders").innerHTML=(d.recentOrders||[]).length?(d.recentOrders||[]).map(o=>`<div class="row"><div class="dot"></div><div><b>Order ${esc(String(o.bol_order_id||o.orderId||"").slice(-6))} · ${euro.format(Number(o.total_amount||o.amount||0))}</b><p>${esc(shortDate(String(o.ordered_at||"").slice(0,10)))} · ${esc(time(o.ordered_at||o.time))}</p></div></div>`).join(""):'<div class="empty">Geen orders in deze periode.</div>';
     const ls=d.lastSync?.finished_at?dateTime(d.lastSync.finished_at):"onbekend";
     $("competitors").innerHTML=(d.competitors||[]).length?(d.competitors||[]).map(x=>`<div class="row"><div class="dot warn"></div><div><b>${esc(x.competitor?.seller_name||x.competitor?.seller_id||"Concurrent")} · ${euro.format(Number(x.snapshot?.price||0))}</b><p>EAN ${esc(x.competitor?.ean||"")}${x.snapshot?.is_best_offer?" · beste aanbod":" · concurrent"}</p></div></div>`).join(""):'<div class="empty">Nog geen directe concurrent op dezelfde EAN gevonden.</div>';
     $("systemStatus").innerHTML=`<div class="row"><div class="dot"></div><div><b>${num.format(d.kpis?.activeProducts||0)} actieve producten</b><p>${num.format(d.kpis?.totalProducts||0)} producten bekend</p></div></div><div class="row"><div class="dot"></div><div><b>Bol API verbonden</b><p>Laatste sync: ${esc(ls)}</p></div></div><div class="row"><div class="dot"></div><div><b>Code onder eigen beheer</b><p>Frontend via GitHub Pages</p></div></div>`;
+  }
+
+  function trendText(value,suffix="%"){
+    const n=Number(value||0),sign=n>0?"+":"";
+    return `${sign}${dec.format(n)}${suffix}`;
+  }
+
+  function renderBusinessInsights(d){
+    const i=d.businessInsights;
+    if(!i)return;
+    $("insightPeriod").textContent=`Laatste 7 complete meetdagen · ${periodLabel(i.period.from,i.period.to)}`;
+    $("insightGenerated").textContent=`Bijgewerkt ${dateTime(i.generatedAt)}`;
+
+    const gap=Math.max(0,Number(i.weeklyTarget||14)-Number(i.sales7d||0));
+    const onTarget=Number(i.sales7d||0)>=Number(i.weeklyTarget||14);
+    $("insightHero").innerHTML=onTarget
+      ? `<div><span class="status-dot good"></span><b>Tempo ligt op of boven je doel van 2 sales per dag.</b></div><strong>${dec.format(i.salesPerDay||0)} / dag</strong>`
+      : `<div><span class="status-dot watch"></span><b>Nog ${num.format(gap)} sales nodig om 14 per week te halen.</b></div><strong>${dec.format(i.salesPerDay||0)} / dag</strong>`;
+
+    $("insightSales").textContent=`${num.format(i.sales7d||0)} / ${num.format(i.weeklyTarget||14)}`;
+    $("insightSalesSub").textContent=`${trendText(i.salesTrendPct)} vs vorige 7d`;
+    $("insightRevenue").textContent=euro.format(Number(i.revenue7d||0));
+    $("insightRevenueSub").textContent=`${trendText(i.revenueTrendPct)} vs vorige 7d`;
+    $("insightVisits").textContent=num.format(i.visits7d||0);
+    $("insightVisitsSub").textContent=`${trendText(i.visitsTrendPct)} vs vorige 7d`;
+    $("insightConversion").textContent=dec.format(i.conversion7d||0)+"%";
+    $("insightConversionSub").textContent=`${trendText(i.conversionTrendPp," pp")} vs vorige 7d`;
+
+    const actions=[];
+    if(i.topProduct) actions.push({kind:"good",title:"Sterkste product",text:`${i.topProduct.name}: ${num.format(i.topProduct.sales||0)} sales uit ${num.format(i.topProduct.visits||0)} bezoeken (${dec.format(i.topProduct.conversion||0)}%).`});
+    if(i.opportunity){
+      const noSales=Number(i.opportunity.sales||0)===0;
+      actions.push({kind:"watch",title:"Grootste conversiekans",text:noSales
+        ? `${i.opportunity.name} kreeg ${num.format(i.opportunity.visits||0)} bezoeken maar nog geen sale. Eerste kandidaat voor hoofdafbeelding, prijs/USP of contenttest.`
+        : `${i.opportunity.name} converteert ${dec.format(i.opportunity.conversion||0)}% op ${num.format(i.opportunity.visits||0)} bezoeken. Hier valt relatief veel winst te boeken.`});
+    }
+    if(Number(i.visitsTrendPct||0)<-10) actions.push({kind:"watch",title:"Verkeer daalt",text:`Bezoeken liggen ${Math.abs(Number(i.visitsTrendPct||0)).toFixed(1).replace(".",",")}% onder de vorige 7 dagen. Focus op vindbaarheid en relevante zoektermen voordat je prijs verlaagt.`});
+    else if(Number(i.visitsTrendPct||0)>10) actions.push({kind:"good",title:"Meer bereik",text:`Bezoeken zijn ${dec.format(i.visitsTrendPct||0)}% gestegen. Controleer vooral of de conversie meegroeit; anders zit de winst in de listing zelf.`});
+    const ct=i.competitorTracking;
+    if(ct&&Number(ct.successes||0)<Number(ct.targets_total||0)) actions.push({kind:"info",title:"Concurrentiedata",text:`De laatste automatische voorraadmeting haalde ${num.format(ct.successes||0)}/${num.format(ct.targets_total||0)} concurrenten. Concurrent-sales blijven daarom een schatting zodra voldoende metingen beschikbaar zijn.`});
+    $("insightActions").innerHTML=actions.slice(0,4).map(a=>`<div class="insight-action ${a.kind}"><div class="insight-icon"></div><div><b>${esc(a.title)}</b><p>${esc(a.text)}</p></div></div>`).join("");
+
+    const s=i.searchVolume||{},terms=s.topTerms||[];
+    if(!s.latestDate||!terms.length) $("searchVolumeBox").innerHTML='<div class="empty">Nog geen zoekvolume. Klik op “Ververs Bol-data” om de nieuwste zoektermen op te halen.</div>';
+    else{
+      const trend=s.trackedVolumeTrendPct==null?"":` · ${trendText(s.trackedVolumeTrendPct)} vs dag ervoor`;
+      $("searchVolumeBox").innerHTML=`<div class="search-head"><div><strong>${num.format(s.trackedVolume||0)}</strong><span>zoekopdrachten in gevolgde termen${trend}</span></div><small>Meetdag ${esc(shortDate(s.latestDate))}</small></div><div class="search-terms">${terms.map(t=>`<div class="search-term"><span>${esc(t.term)}</span><strong>${num.format(t.volume||0)}</strong><small>${t.changePct==null?"":trendText(t.changePct)}</small></div>`).join("")}</div><div class="search-note">${esc(s.note||"")}</div>`;
+    }
   }
 
   function renderProducts(d){
