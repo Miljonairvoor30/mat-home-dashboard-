@@ -189,14 +189,32 @@ Deno.serve(async(req)=>{
   const trackedSearchVolume=searchLatest.reduce((s:number,x:any)=>s+Number(x.search_volume||0),0);
   const trackedSearchPrev=searchPrev.reduce((s:number,x:any)=>s+Number(x.search_volume||0),0);
   const weeklyTarget=14;
+  const weekday=new Date(today+"T12:00:00Z").getUTCDay();
+  const daysSinceMonday=(weekday+6)%7;
+  const weekFrom=shiftDate(today,-daysSinceMonday);
+  const weekTo=shiftDate(weekFrom,6);
+  const elapsedWeekDays=daysSinceMonday+1;
+  const prevWeekFrom=shiftDate(weekFrom,-7);
+  const prevWeekSameTo=shiftDate(prevWeekFrom,daysSinceMonday);
+  const ordersThisWeek=orders.filter((o:any)=>inRange(localDate(o.ordered_at),weekFrom,today));
+  const ordersPrevSameWeek=orders.filter((o:any)=>inRange(localDate(o.ordered_at),prevWeekFrom,prevWeekSameTo));
+  const salesThisWeek=ordersThisWeek.length;
+  const salesPerElapsedDay=elapsedWeekDays>0?salesThisWeek/elapsedWeekDays:0;
+  const targetToDate=elapsedWeekDays*2;
   const businessInsights={
     generatedAt:new Date().toISOString(),
     period:{from:insightFrom,to:insightTo},
+    week:{from:weekFrom,to:weekTo,through:today,elapsedDays:elapsedWeekDays},
     salesTargetPerDay:2,
     weeklyTarget,
+    salesThisWeek,
+    salesPerElapsedDay:Math.round(salesPerElapsedDay*100)/100,
+    targetToDate,
+    paceDelta:salesThisWeek-targetToDate,
+    targetProgressPct:Math.round((salesThisWeek/weeklyTarget*100)*10)/10,
+    salesWeekTrendPct:Math.round(pct(salesThisWeek,ordersPrevSameWeek.length)*10)/10,
     sales7d:orders7.length,
     salesPerDay:Math.round((orders7.length/7)*100)/100,
-    targetProgressPct:Math.round((orders7.length/weeklyTarget*100)*10)/10,
     salesTrendPct:Math.round(pct(orders7.length,ordersPrev7.length)*10)/10,
     revenue7d:Math.round(revenue7*100)/100,
     revenueTrendPct:Math.round(pct(revenue7,revenuePrev7)*10)/10,
