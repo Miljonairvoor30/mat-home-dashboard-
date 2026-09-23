@@ -1,5 +1,5 @@
 (() => {
-  const cfg=window.MAT_HOME_CONFIG||{},API=cfg.dashboardApi,COMP_API=cfg.competitorSalesApi,AGENT_API=cfg.agentApi;
+  const cfg=window.MAT_HOME_CONFIG||{},API=cfg.dashboardApi,COMP_API=cfg.competitorSalesApi,AGENT_API=cfg.agentApi,CHAT_API=cfg.agentChatApi;
   const $=id=>document.getElementById(id);
   const euro=new Intl.NumberFormat("nl-NL",{style:"currency",currency:"EUR"});
   const num=new Intl.NumberFormat("nl-NL"),dec=new Intl.NumberFormat("nl-NL",{minimumFractionDigits:1,maximumFractionDigits:1});
@@ -190,50 +190,81 @@
     return Date.parse(dateIso+"T00:00:00Z")-offset;
   }
 
-  function clearAgentChat(){
-    localStorage.removeItem(AGENT_CHAT_KEY);
-    localStorage.setItem(AGENT_CHAT_DAY_KEY,today());
+  function renderAgentHistory(messages){
     const box=$("agentMessages");
-    if(box)box.innerHTML='<div class="agent-message agent">Vraag bijvoorbeeld: “sales deze week?”, “beste product?” of “waar valt winst?”</div>';
-  }
-
-  function loadAgentChat(){
-    const currentDay=today();
-    const savedDay=localStorage.getItem(AGENT_CHAT_DAY_KEY);
-    if(savedDay&&savedDay!==currentDay){
-      clearAgentChat();
+    if(!box)return;
+    if(!Array.isArray(messages)||!messages.length){
+      box.innerHTML='<div class="agent-message agent">Vraag bijvoorbeeld: “sales deze week?”, “beste product?” of “waar valt winst?”</div>';
       return;
     }
-    if(!savedDay)localStorage.setItem(AGENT_CHAT_DAY_KEY,currentDay);
-    let messages=[];
-    try{messages=JSON.parse(localStorage.getItem(AGENT_CHAT_KEY)||"[]")}catch(_){}
-    const box=$("agentMessages");
-    if(!box||!Array.isArray(messages)||!messages.length)return;
     box.innerHTML="";
     messages.forEach(m=>{
       const div=document.createElement("div");
-      div.className="agent-message "+(m.who==="user"?"user":"agent");
-      div.textContent=String(m.text||"");
+      const who=(m.who||m.role)==="user"?"user":"agent";
+      div.className="agent-message "+who;
+      div.textContent=String(m.text||m.content||"");
       box.appendChild(div);
     });
     box.scrollTop=box.scrollHeight;
   }
 
+  function localAgentHistory(){
+    try{
+      const messages=JSON.parse(localStorage.getItem(AGENT_CHAT_KEY)||"[]");
+      return Array.isArray(messages)?messages:[];
+    }catch(_){return []}
+  }
+
+  async function clearAgentChat(syncServer=true){
+    localStorage.removeItem(AGENT_CHAT_KEY);
+    localStorage.setItem(AGENT_CHAT_DAY_KEY,today());
+    renderAgentHistory([]);
+    if(syncServer&&CHAT_API&&code()){
+      try{await request(CHAT_API,{method:"POST",body:JSON.stringify({action:"clear"})})}catch(_){}
+    }
+  }
+
+  async function loadAgentChat(){
+    const currentDay=today();
+    if(localStorage.getItem(AGENT_CHAT_DAY_KEY)!==currentDay){
+      localStorage.removeItem(AGENT_CHAT_KEY);
+      localStorage.setItem(AGENT_CHAT_DAY_KEY,currentDay);
+    }
+    if(!CHAT_API||!code()){
+      renderAgentHistory(localAgentHistory());
+      return;
+    }
+    try{
+      const data=await request(CHAT_API);
+      const messages=(data.messages||[]).map(m=>({who:m.role,text:m.content,ts:m.created_at}));
+      localStorage.setItem(AGENT_CHAT_KEY,JSON.stringify(messages.slice(-200)));
+      localStorage.setItem(AGENT_CHAT_DAY_KEY,data.day||currentDay);
+      renderAgentHistory(messages);
+    }catch(_){
+      renderAgentHistory(localAgentHistory());
+    }
+  }
+
   function saveAgentMessage(text,who){
-    let messages=[];
-    try{messages=JSON.parse(localStorage.getItem(AGENT_CHAT_KEY)||"[]")}catch(_){}
-    if(!Array.isArray(messages))messages=[];
-    messages.push({text:String(text),who:who==="user"?"user":"agent",ts:Date.now()});
-    if(messages.length>100)messages=messages.slice(-100);
+    let messages=localAgentHistory();
+    const msg={text:String(text),who:who==="user"?"user":"agent",ts:Date.now()};
+    messages.push(msg);
+    if(messages.length>200)messages=messages.slice(-200);
     localStorage.setItem(AGENT_CHAT_KEY,JSON.stringify(messages));
     localStorage.setItem(AGENT_CHAT_DAY_KEY,today());
+    if(CHAT_API&&code()){
+      request(CHAT_API,{
+        method:"POST",
+        body:JSON.stringify({action:"save",role:msg.who,content:msg.text})
+      }).catch(()=>{});
+    }
   }
 
   function scheduleAgentMidnightReset(){
     const nextDay=shift(today(),1);
     const delay=Math.max(1000,amsterdamMidnightUtcMs(nextDay)-Date.now());
-    setTimeout(()=>{
-      clearAgentChat();
+    setTimeout(async()=>{
+      await clearAgentChat(true);
       scheduleAgentMidnightReset();
     },delay);
   }
@@ -362,18 +393,17 @@
   $("applyProductPeriod").addEventListener("click",applyProducts);
   $("applyCompetitorPeriod").addEventListener("click",loadCompetitorSales);
 
-  $("loginForm").addEventListener("submit",e=>{e.preventDefault();localStorage.setItem("mh_code",$("code").value.trim());Promise.all([loadInitial(),loadCompetitorSales()])});
+  $("loginForm").addEventListener("submit",e=>{e.preventDefault();localStorage.setItem("mh_code",$("code").value.trim());Promise.all([loadInitial(),loadCompetitorSales(),loadAgentChat()])});
   $("logout").addEventListener("click",()=>{localStorage.removeItem("mh_code");$("code").value="";showLogin()});
   $("refresh").addEventListener("click",async()=>{await loadInitial(true);await loadCompetitorSales()});
   $("toggleAddCompetitor").addEventListener("click",()=>$("addCompetitorForm").classList.toggle("hidden"));
   $("saveCompetitor").addEventListener("click",async()=>{const name=$("compName").value.trim(),productUrl=$("compUrl").value.trim();if(!name||!productUrl){$("compFormMsg").textContent="Naam en product-URL zijn verplicht.";return}$("saveCompetitor").disabled=true;try{await request(COMP_API,{method:"POST",body:JSON.stringify({action:"add_target",name,productUrl,sellerName:$("compSeller").value.trim()||undefined,ean:$("compEan").value.trim()||undefined})});["compName","compUrl","compSeller","compEan"].forEach(id=>$(id).value="");$("compFormMsg").textContent="Concurrent toegevoegd.";await loadCompetitorSales()}catch(e){$("compFormMsg").textContent="Toevoegen is niet gelukt."}finally{$("saveCompetitor").disabled=false}});
 
-  loadAgentChat();
   scheduleAgentMidnightReset();
-  document.addEventListener("visibilitychange",()=>{if(!document.hidden&&localStorage.getItem(AGENT_CHAT_DAY_KEY)!==today())clearAgentChat()});
+  document.addEventListener("visibilitychange",()=>{if(!document.hidden)loadAgentChat()});
 
   const t=today();$("overviewFrom").value=t;$("overviewTo").value=t;
   $("productFrom").value=shift(t,-1);$("productTo").value=shift(t,-1);
   $("competitorFrom").value=shift(t,-6);$("competitorTo").value=t;
-  if(code()){Promise.all([loadInitial(),loadCompetitorSales()])}else showLogin();
+  if(code()){Promise.all([loadInitial(),loadCompetitorSales(),loadAgentChat()])}else showLogin();
 })();
