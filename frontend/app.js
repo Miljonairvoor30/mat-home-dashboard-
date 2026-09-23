@@ -87,14 +87,21 @@
     $("insightPeriod").textContent=`Laatste 7 complete meetdagen · ${periodLabel(i.period.from,i.period.to)}`;
     $("insightGenerated").textContent=`Bijgewerkt ${dateTime(i.generatedAt)}`;
 
-    const gap=Math.max(0,Number(i.weeklyTarget||14)-Number(i.sales7d||0));
-    const onTarget=Number(i.sales7d||0)>=Number(i.weeklyTarget||14);
-    $("insightHero").innerHTML=onTarget
-      ? `<div><span class="status-dot good"></span><b>Tempo ligt op of boven je doel van 2 sales per dag.</b></div><strong>${dec.format(i.salesPerDay||0)} / dag</strong>`
-      : `<div><span class="status-dot watch"></span><b>Nog ${num.format(gap)} sales nodig om 14 per week te halen.</b></div><strong>${dec.format(i.salesPerDay||0)} / dag</strong>`;
+    const weekSales=Number(i.salesThisWeek??i.sales7d??0);
+    const gap=Math.max(0,Number(i.weeklyTarget||14)-weekSales);
+    const paceDelta=Number(i.paceDelta||0);
+    const weekLabel=i.week?`${shortDate(i.week.from)} t/m ${shortDate(i.week.to)}`:"ma t/m zo";
+    $("insightPeriod").textContent=`Weekdoel: 2 sales per dag · ${weekLabel} · overige analyse laatste 7 meetdagen`;
+    if(gap===0){
+      $("insightHero").innerHTML=`<div><span class="status-dot good"></span><b>Weekdoel van 14 sales is gehaald.</b></div><strong>${num.format(weekSales)} / ${num.format(i.weeklyTarget||14)}</strong>`;
+    }else if(paceDelta>=0){
+      $("insightHero").innerHTML=`<div><span class="status-dot good"></span><b>Deze week lig je op of boven het tempo van 2 sales per dag. Nog ${num.format(gap)} voor het weekdoel.</b></div><strong>${num.format(weekSales)} / ${num.format(i.weeklyTarget||14)}</strong>`;
+    }else{
+      $("insightHero").innerHTML=`<div><span class="status-dot watch"></span><b>Deze week ${num.format(Math.abs(paceDelta))} sale${Math.abs(paceDelta)===1?"":"s"} achter op tempo. Nog ${num.format(gap)} voor het weekdoel.</b></div><strong>${num.format(weekSales)} / ${num.format(i.weeklyTarget||14)}</strong>`;
+    }
 
-    $("insightSales").textContent=`${num.format(i.sales7d||0)} / ${num.format(i.weeklyTarget||14)}`;
-    $("insightSalesSub").textContent=`${trendText(i.salesTrendPct)} vs vorige 7d`;
+    $("insightSales").textContent=`${num.format(weekSales)} / ${num.format(i.weeklyTarget||14)}`;
+    $("insightSalesSub").textContent=`${trendText(i.salesWeekTrendPct)} vs zelfde dagen vorige week`;
     $("insightRevenue").textContent=euro.format(Number(i.revenue7d||0));
     $("insightRevenueSub").textContent=`${trendText(i.revenueTrendPct)} vs vorige 7d`;
     $("insightVisits").textContent=num.format(i.visits7d||0);
