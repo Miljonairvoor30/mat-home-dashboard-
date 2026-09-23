@@ -11,7 +11,7 @@
   const shift=(iso,days)=>{const d=new Date(iso+"T12:00:00Z");d.setUTCDate(d.getUTCDate()+days);return d.toISOString().slice(0,10)};
   const code=()=>localStorage.getItem("mh_code")||"";
   const headers=()=>({"x-dashboard-code":code(),"content-type":"application/json"});
-  let latestMetricDate=null;
+  let latestMetricDate=null,latestDashboard=null,latestCompetitorData=null;
 
   async function request(url,options={}){
     const r=await fetch(url,{...options,headers:{...headers(),...(options.headers||{})},cache:"no-store"});
@@ -49,6 +49,7 @@
     try{
       const d=await request(withRange(API,null,refresh));
       latestMetricDate=d.kpis?.latestMetricDate||null;
+      latestDashboard=d;
       renderOverview(d,false);renderProducts(d);renderBusinessInsights(d);showApp();
       if(refresh){banner.textContent=d.refreshed?"Bol-data is opnieuw gesynchroniseerd.":"Dashboard geladen; sync gaf geen bevestiging.";setTimeout(()=>banner.classList.add("hidden"),2800)}
     }catch(e){if(e.message!=="unauthorized"){banner.classList.remove("hidden");banner.textContent="Kon dashboarddata niet laden."}}
@@ -63,9 +64,7 @@
     $("revenue").textContent=euro.format(d.kpis?.revenueToday||0);
     $("revenueSub").textContent=`${num.format(d.kpis?.ordersToday||0)} bestelling${d.kpis?.ordersToday===1?"":"en"}`;
     $("orders").textContent=num.format(d.kpis?.ordersToday||0);
-    $("visits").textContent=num.format(d.kpis?.visitsLatest||0);
-    $("visitsSub").textContent=filtered?`Periode: ${label}`:(d.kpis?.latestMetricDate?`Laatste meetdag: ${shortDate(d.kpis.latestMetricDate)}`:"Nog geen bezoekdata");
-    $("conversion").textContent=dec.format(d.kpis?.conversionLatest||0)+"%";
+    // Bezoeken en conversie staan nu in MAT HOME UPDATE en de MAT Agent.
     const series=d.ordersSeries||[],max=Math.max(1,...series.map(x=>x.orders||0));
     const chartRange=d.ordersSeriesRange;
     $("ordersChartTitle").textContent=`Bestellingen per dag · ${chartRange?periodLabel(chartRange.from,chartRange.to):label}`;
@@ -143,7 +142,7 @@
     const preset=$("overviewPreset").value,range=makeRange(preset,"overviewFrom","overviewTo");
     if(!range)return alert("Kies een begin- en einddatum.");
     $("applyOverviewPeriod").disabled=true;
-    try{const d=await request(withRange(API,range));renderOverview(d,true)}catch(e){if(e.message!=="unauthorized")alert("Periode laden is niet gelukt.")}
+    try{const d=await request(withRange(API,range));latestDashboard=d;renderOverview(d,true)}catch(e){if(e.message!=="unauthorized")alert("Periode laden is niet gelukt.")}
     finally{$("applyOverviewPeriod").disabled=false}
   }
   async function applyProducts(){
@@ -160,6 +159,7 @@
     if(!range)return;
     try{
       const d=await request(withRange(COMP_API,range)),targets=d.targets||[];
+      latestCompetitorData=d;
       const est=targets.reduce((a,t)=>a+Number(t.estimatedSalesRange||0),0);
       const avg=targets.reduce((a,t)=>a+Number(t.avgSalesPerDayRange||0),0);
       $("compRangeLabel").textContent=`Geschat · ${periodLabel(range.from,range.to)}`;
@@ -176,6 +176,109 @@
     }catch(e){if(e.message!=="unauthorized")$("competitorSales").innerHTML='<div class="empty">Concurrent-schattingen konden niet geladen worden.</div>'}
   }
 
+  function agentAdd(text,who="agent"){
+    const box=$("agentMessages");
+    if(!box)return;
+    const div=document.createElement("div");
+    div.className="agent-message "+who;
+    div.textContent=text;
+    box.appendChild(div);
+    while(box.children.length>6)box.removeChild(box.firstChild);
+    box.scrollTop=box.scrollHeight;
+  }
+
+  function norm(s){return String(s||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").trim()}
+
+  function productMatch(q){
+    const d=latestDashboard;
+    if(!d?.products?.length)return null;
+    const nq=norm(q);
+    const stop=["hoeveel","heeft","sales","orders","bezoeken","omzet","product","deze","week","vandaag"];
+    const words=nq.split(/\s+/).filter(function(w){return w.length>2&&!stop.includes(w)});
+    return d.products.map(function(p){
+      const hay=norm((p.variant||"")+" "+(p.title||""));
+      const score=words.reduce(function(s,w){return s+(hay.includes(w)?1:0)},0);
+      return {p:p,score:score};
+    }).filter(function(x){return x.score>0}).sort(function(a,b){return b.score-a.score})[0]?.p||null;
+  }
+
+  function agentAnswer(question){
+    const d=latestDashboard;
+    if(!d)return "De dashboarddata is nog niet geladen.";
+    const q=norm(question),i=d.businessInsights||{},k=d.kpis||{};
+    const weekSales=Number(i.salesThisWeek??0),weekTarget=Number(i.weeklyTarget||14);
+    const gap=Math.max(0,weekTarget-weekSales);
+
+    if(/(sales|orders|bestellingen).*(deze week|week)|deze week.*(sales|orders|bestellingen)/.test(q))
+      return "Deze week sta je op "+num.format(weekSales)+" van "+num.format(weekTarget)+" sales. Nog "+num.format(gap)+" nodig voor je weekdoel.";
+
+    if(/(sales|orders|bestellingen).*(vandaag)|vandaag.*(sales|orders|bestellingen)/.test(q))
+      return "Vandaag: "+num.format(k.ordersToday||0)+" bestelling"+(Number(k.ordersToday||0)===1?"":"en")+".";
+
+    if(/omzet.*vandaag|vandaag.*omzet/.test(q))
+      return "Omzet vandaag: "+euro.format(Number(k.revenueToday||0))+".";
+
+    if(/omzet.*(week|7|zeven)|(week|7|zeven).*omzet/.test(q))
+      return "Omzet over de laatste 7 meetdagen: "+euro.format(Number(i.revenue7d||0))+" ("+trendText(i.revenueTrendPct)+" versus de 7 dagen ervoor).";
+
+    if(/bezoek|traffic|verkeer/.test(q))
+      return "Laatste 7 meetdagen: "+num.format(i.visits7d||0)+" bezoeken ("+trendText(i.visitsTrendPct)+" versus de 7 dagen ervoor).";
+
+    if(/convers/.test(q))
+      return "Conversie over de laatste 7 meetdagen: "+dec.format(i.conversion7d||0)+"%. Verandering: "+trendText(i.conversionTrendPp," pp")+".";
+
+    if(/doel|target|tempo/.test(q))
+      return "Je doel is 2 sales per dag = 14 per maandag-zondagweek. Nu: "+num.format(weekSales)+"/"+num.format(weekTarget)+"; "+(gap?("nog "+num.format(gap)+" nodig"):"doel gehaald")+".";
+
+    if(/beste product|sterkste product|top product|hardloper/.test(q)){
+      const p=i.topProduct;
+      return p?(p.name+" is nu het sterkste product: "+num.format(p.sales||0)+" sales uit "+num.format(p.visits||0)+" bezoeken ("+dec.format(p.conversion||0)+"% conversie)."):"Nog geen productanalyse beschikbaar.";
+    }
+
+    if(/waar.*winst|kans|verbeter|optimal/.test(q)){
+      const p=i.opportunity;
+      if(!p)return "Ik zie nog geen duidelijke productkans in de huidige meetdata.";
+      return Number(p.sales||0)===0
+        ? "Grootste kans: "+p.name+". "+num.format(p.visits||0)+" bezoeken en nog 0 sales. Eerst hoofdafbeelding, USP/tekst en prijspositionering testen."
+        : "Grootste kans: "+p.name+". "+num.format(p.visits||0)+" bezoeken met "+dec.format(p.conversion||0)+"% conversie. Hier zou ik de listing als eerste optimaliseren.";
+    }
+
+    if(/zoekvolume|zoekwoord|search/.test(q)){
+      const s=i.searchVolume||{},terms=s.topTerms||[];
+      if(!terms.length)return "Nog geen zoekvolume geladen. Gebruik eerst ‘Ververs Bol-data’.";
+      return "Hoogste gevolgde zoekterm: “"+terms[0].term+"” met "+num.format(terms[0].volume||0)+" zoekopdrachten op de laatste meetdag. Ik volg "+num.format(s.trackedTerms||terms.length)+" termen.";
+    }
+
+    if(/concurrent/.test(q)){
+      const targets=latestCompetitorData?.targets||[];
+      const usable=targets.filter(function(t){return Number(t.rangeSnapshotsCount||0)>=2});
+      const est=usable.reduce(function(s,t){return s+Number(t.estimatedSalesRange||0)},0);
+      return usable.length
+        ? "Voor "+usable.length+" concurrenten zijn voldoende metingen beschikbaar; gezamenlijke geschatte sales in de gekozen periode: "+num.format(est)+". Dit blijft een voorraadschatting."
+        : "Er zijn nog onvoldoende dubbele voorraadmetingen om betrouwbare concurrent-sales te schatten.";
+    }
+
+    const p=productMatch(q);
+    if(p)return (p.variant||p.title)+": "+num.format(p.visits||0)+" bezoeken en "+num.format(p.ordersPerformance||0)+" orders in de momenteel gekozen productperiode.";
+
+    return "Ik kan nu korte vragen beantwoorden over sales, omzet, weekdoel, bezoeken, conversie, producten, zoekvolume en concurrenten.";
+  }
+
+  $("agentForm")?.addEventListener("submit",function(e){
+    e.preventDefault();
+    const input=$("agentInput"),q=input.value.trim();
+    if(!q)return;
+    agentAdd(q,"user");
+    input.value="";
+    setTimeout(function(){agentAdd(agentAnswer(q),"agent")},100);
+  });
+  document.querySelectorAll("[data-agent-q]").forEach(function(btn){
+    btn.addEventListener("click",function(){
+      const q=btn.dataset.agentQ;
+      agentAdd(q,"user");
+      setTimeout(function(){agentAdd(agentAnswer(q),"agent")},100);
+    });
+  });
   function bindCustom(selectId,boxId){$(selectId).addEventListener("change",()=>$(boxId).classList.toggle("hidden",$(selectId).value!=="custom"))}
   bindCustom("overviewPreset","overviewCustom");bindCustom("productPreset","productCustom");bindCustom("competitorPreset","competitorCustom");
   $("applyOverviewPeriod").addEventListener("click",applyOverview);
