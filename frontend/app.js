@@ -1,5 +1,5 @@
 (() => {
-  const cfg=window.MAT_HOME_CONFIG||{},API=cfg.dashboardApi,COMP_API=cfg.competitorSalesApi;
+  const cfg=window.MAT_HOME_CONFIG||{},API=cfg.dashboardApi,COMP_API=cfg.competitorSalesApi,AGENT_API=cfg.agentApi;
   const $=id=>document.getElementById(id);
   const euro=new Intl.NumberFormat("nl-NL",{style:"currency",currency:"EUR"});
   const num=new Intl.NumberFormat("nl-NL"),dec=new Intl.NumberFormat("nl-NL",{minimumFractionDigits:1,maximumFractionDigits:1});
@@ -264,20 +264,35 @@
     return "Ik kan nu korte vragen beantwoorden over sales, omzet, weekdoel, bezoeken, conversie, producten, zoekvolume en concurrenten.";
   }
 
+  async function askAgent(q){
+    agentAdd(q,"user");
+    const input=$("agentInput");
+    if(input)input.value="";
+    const box=$("agentMessages");
+    const thinking=document.createElement("div");
+    thinking.className="agent-message agent thinking";
+    thinking.textContent="Ik analyseer sales, verkeer, conversie en producten…";
+    box.appendChild(thinking);
+    box.scrollTop=box.scrollHeight;
+    try{
+      if(!AGENT_API)throw new Error("agent api ontbreekt");
+      const data=await request(AGENT_API,{method:"POST",body:JSON.stringify({question:q})});
+      thinking.remove();
+      agentAdd(data.answer||agentAnswer(q),"agent");
+    }catch(e){
+      thinking.remove();
+      agentAdd(agentAnswer(q),"agent");
+    }
+  }
+
   $("agentForm")?.addEventListener("submit",function(e){
     e.preventDefault();
     const input=$("agentInput"),q=input.value.trim();
     if(!q)return;
-    agentAdd(q,"user");
-    input.value="";
-    setTimeout(function(){agentAdd(agentAnswer(q),"agent")},100);
+    askAgent(q);
   });
   document.querySelectorAll("[data-agent-q]").forEach(function(btn){
-    btn.addEventListener("click",function(){
-      const q=btn.dataset.agentQ;
-      agentAdd(q,"user");
-      setTimeout(function(){agentAdd(agentAnswer(q),"agent")},100);
-    });
+    btn.addEventListener("click",function(){askAgent(btn.dataset.agentQ)});
   });
   function bindCustom(selectId,boxId){$(selectId).addEventListener("change",()=>$(boxId).classList.toggle("hidden",$(selectId).value!=="custom"))}
   bindCustom("overviewPreset","overviewCustom");bindCustom("productPreset","productCustom");bindCustom("competitorPreset","competitorCustom");
