@@ -96,15 +96,27 @@ async function cartHref(page) {
 }
 
 async function clickAddToCart(page) {
+  await page.waitForTimeout(1800);
+  await page.waitForLoadState("networkidle",{timeout:5000}).catch(()=>{});
   const locators=[
     page.getByRole("button",{name:/in winkelwagen/i}).first(),
+    page.getByRole("link",{name:/in winkelwagen/i}).first(),
+    page.getByText(/^in winkelwagen$/i).first(),
     page.getByRole("button",{name:/voeg.*winkelwagen/i}).first(),
-    page.locator('button:has-text("In winkelwagen")').first(),
-    page.locator('[data-test*="add-to-basket"],[data-testid*="add-to-basket"],[data-test*="add-to-cart"]').first()
+    page.locator('button:has-text("In winkelwagen"),a:has-text("In winkelwagen")').first(),
+    page.locator('[aria-label*="winkelwagen" i],[data-test*="add-to-basket"],[data-testid*="add-to-basket"],[data-test*="add-to-cart"]').first(),
+    page.locator('form[action*="basket" i] button,form[action*="cart" i] button').first(),
+    page.locator('input[type="submit"][value*="winkelwagen" i]').first()
   ];
   for(const loc of locators){
     if(await loc.count()){
-      try{if(await loc.isVisible({timeout:800})){await loc.click({timeout:7000});return true}}catch{}
+      try{
+        if(await loc.isVisible({timeout:1200})){
+          await loc.scrollIntoViewIfNeeded().catch(()=>{});
+          await loc.click({timeout:8000});
+          return true;
+        }
+      }catch{}
     }
   }
   return false;
@@ -192,7 +204,13 @@ async function forceLargeQuantity(page,networkPayloads) {
 
 async function measureTarget(browser,target) {
   const started=Date.now();
-  const context=await browser.newContext({locale:"nl-NL",timezoneId:"Europe/Amsterdam",viewport:{width:1365,height:900}});
+  const context=await browser.newContext({
+    locale:"nl-NL",
+    timezoneId:"Europe/Amsterdam",
+    viewport:{width:1365,height:900},
+    userAgent:"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36",
+    extraHTTPHeaders:{"Accept-Language":"nl-NL,nl;q=0.9,en;q=0.8"}
+  });
   const page=await context.newPage();
   const networkPayloads=[];
   page.on("response",async response=>{
@@ -210,7 +228,17 @@ async function measureTarget(browser,target) {
     const productText=await page.locator("body").innerText().catch(()=>"");
     if(/captcha|ben je een robot|robotcontrole|ongebruikelijk verkeer/i.test(productText))throw new Error("Bol anti-bot/captcha detected");
 
-    if(!await clickAddToCart(page))throw new Error("Add-to-cart button not found");
+    if(!await clickAddToCart(page)){
+      const title=await page.title().catch(()=>"");
+      const body=(await page.locator("body").innerText().catch(()=>"")).replace(/\s+/g," ").slice(0,700);
+      const buttons=await page.locator("button,a,input[type=submit]").evaluateAll(els=>els.slice(0,80).map(el=>({
+        tag:el.tagName,
+        text:(el.textContent||el.getAttribute("value")||el.getAttribute("aria-label")||"").trim().replace(/\s+/g," ").slice(0,120),
+        href:el.getAttribute("href")||"",
+        test:el.getAttribute("data-test")||el.getAttribute("data-testid")||""
+      })).filter(x=>x.text||x.test)).catch(()=>[]);
+      throw new Error(`Add-to-cart button not found; title=${title}; url=${page.url()}; body=${body}; controls=${JSON.stringify(buttons).slice(0,1600)}`);
+    }
     await page.waitForTimeout(1200);
 
     let cart=await cartHref(page);
