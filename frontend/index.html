@@ -11,7 +11,7 @@
   <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png?v=moneybag-1">
   <link rel="icon" type="image/png" href="./apple-touch-icon.png?v=moneybag-1">
   <title>MAT Home Dashboard</title>
-  <link rel="stylesheet" href="./styles.css?v=insights-1">
+  <link rel="stylesheet" href="./styles.css?v=agent-1">
 </head>
 <body>
   <div id="login" class="login-screen">
@@ -43,7 +43,7 @@
       <section class="period-panel">
         <div>
           <b>Dashboardperiode</b>
-          <span>Omzet, orders, bezoeken en conversie</span>
+          <span>Omzet, orders en dagelijkse prestaties</span>
         </div>
         <div class="period-controls">
           <select id="overviewPreset">
@@ -66,8 +66,27 @@
       <section class="kpis">
         <article class="card"><div class="label">Omzet vandaag</div><div id="revenue" class="value">—</div><div id="revenueSub" class="hint"></div></article>
         <article class="card"><div class="label">Orders vandaag</div><div id="orders" class="value">—</div><div class="hint">Retailer API</div></article>
-        <article class="card"><div class="label">Bezoeken</div><div id="visits" class="value">—</div><div id="visitsSub" class="hint"></div></article>
-        <article class="card"><div class="label">Conversie</div><div id="conversion" class="value">—</div><div class="hint">MVP-berekening</div></article>
+        <article class="card assistant-card">
+          <div class="assistant-head">
+            <div>
+              <div class="assistant-kicker">MAT AGENT</div>
+              <div class="assistant-title">Vraag kort iets over je cijfers</div>
+            </div>
+            <div class="assistant-live"><span></span> live dashboarddata</div>
+          </div>
+          <div id="agentMessages" class="agent-messages">
+            <div class="agent-message agent">Vraag bijvoorbeeld: “sales deze week?”, “beste product?” of “waar valt winst?”</div>
+          </div>
+          <div class="agent-chips">
+            <button type="button" data-agent-q="Sales deze week?">Sales deze week</button>
+            <button type="button" data-agent-q="Beste product?">Beste product</button>
+            <button type="button" data-agent-q="Waar valt winst?">Waar winst?</button>
+          </div>
+          <form id="agentForm" class="agent-form">
+            <input id="agentInput" autocomplete="off" placeholder="Stel een korte vraag…" maxlength="140">
+            <button class="btn primary" type="submit">Vraag</button>
+          </form>
+        </article>
       </section>
 
       <section class="card insight-card">
@@ -176,6 +195,6 @@
     </main>
   </div>
   <script src="./config.js"></script>
-  <script src="./app.js?v=insights-1"></script>
+  <script src="./app.js?v=agent-1"></script>
 </body>
 </html>
