@@ -28,7 +28,9 @@ function positiveDrops(snaps:any[]){
   return sold;
 }
 function validDate(v:string|null){return !!v&&/^\d{4}-\d{2}-\d{2}$/.test(v);}
-function dateOnly(s:any){return String(s||"").slice(0,10);}
+function dateOnly(s:any){
+  return new Intl.DateTimeFormat("sv-SE",{timeZone:"Europe/Amsterdam",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date(s));
+}
 function daysBetween(from:string,to:string){
   return Math.max(1,Math.round((Date.parse(to+"T12:00:00Z")-Date.parse(from+"T12:00:00Z"))/86400000)+1);
 }
@@ -66,9 +68,10 @@ Deno.serve(async(req)=>{
     const hasRange=validDate(qFrom)&&validDate(qTo);
     if(hasRange&&qFrom!>qTo!) return new Response(JSON.stringify({ok:false,error:"Ongeldige periode"}),{status:400,headers:cors});
 
-    const [targets,snaps]=await Promise.all([
+    const [targets,snaps,runs]=await Promise.all([
       rest("competitor_sales_targets?select=id,name,product_url,bol_product_id,ean,seller_name,active,tracking_mode,created_at,updated_at&active=eq.true&order=created_at.asc"),
-      rest("competitor_stock_snapshots?select=id,target_id,captured_at,available_stock,source,note&order=captured_at.asc&limit=5000")
+      rest("competitor_stock_snapshots?select=id,target_id,captured_at,available_stock,source,note&order=captured_at.asc&limit=5000"),
+      rest("competitor_tracking_runs?select=id,started_at,finished_at,status,targets_total,successes,failures,source&order=started_at.desc&limit=1")
     ]);
 
     const now=Date.now(),sevenDaysAgo=now-7*86400000;
@@ -102,6 +105,7 @@ Deno.serve(async(req)=>{
     return new Response(JSON.stringify({
       ok:true,selectedRange:hasRange?{from:qFrom,to:qTo,days:daysBetween(qFrom!,qTo!)}:null,
       methodology:{label:"Geschatte sales via voorraadmutatie",formula:"positieve voorraad-daling tussen metingen",caveat:"Voorraadcorrecties, retouren en aanvullingen kunnen de schatting beïnvloeden."},
+      trackingStatus:(runs||[])[0]||null,
       targets:rows
     }),{headers:{...cors,"Cache-Control":"no-store"}});
   }catch(e){
