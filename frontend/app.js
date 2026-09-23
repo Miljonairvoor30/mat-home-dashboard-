@@ -176,14 +176,76 @@
     }catch(e){if(e.message!=="unauthorized")$("competitorSales").innerHTML='<div class="empty">Concurrent-schattingen konden niet geladen worden.</div>'}
   }
 
-  function agentAdd(text,who="agent"){
+  const AGENT_CHAT_KEY="mh_agent_chat_v1";
+  const AGENT_CHAT_DAY_KEY="mh_agent_chat_day_v1";
+
+  function amsterdamMidnightUtcMs(dateIso){
+    const guess=Date.parse(dateIso+"T00:00:00Z");
+    const parts=new Intl.DateTimeFormat("en-CA",{
+      timeZone:"Europe/Amsterdam",year:"numeric",month:"2-digit",day:"2-digit",
+      hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:false
+    }).formatToParts(new Date(guess)).reduce((a,p)=>(a[p.type]=p.value,a),{});
+    const localAsUtc=Date.UTC(Number(parts.year),Number(parts.month)-1,Number(parts.day),Number(parts.hour)%24,Number(parts.minute),Number(parts.second));
+    const offset=localAsUtc-guess;
+    return Date.parse(dateIso+"T00:00:00Z")-offset;
+  }
+
+  function clearAgentChat(){
+    localStorage.removeItem(AGENT_CHAT_KEY);
+    localStorage.setItem(AGENT_CHAT_DAY_KEY,today());
+    const box=$("agentMessages");
+    if(box)box.innerHTML='<div class="agent-message agent">Vraag bijvoorbeeld: “sales deze week?”, “beste product?” of “waar valt winst?”</div>';
+  }
+
+  function loadAgentChat(){
+    const currentDay=today();
+    const savedDay=localStorage.getItem(AGENT_CHAT_DAY_KEY);
+    if(savedDay&&savedDay!==currentDay){
+      clearAgentChat();
+      return;
+    }
+    if(!savedDay)localStorage.setItem(AGENT_CHAT_DAY_KEY,currentDay);
+    let messages=[];
+    try{messages=JSON.parse(localStorage.getItem(AGENT_CHAT_KEY)||"[]")}catch(_){}
+    const box=$("agentMessages");
+    if(!box||!Array.isArray(messages)||!messages.length)return;
+    box.innerHTML="";
+    messages.forEach(m=>{
+      const div=document.createElement("div");
+      div.className="agent-message "+(m.who==="user"?"user":"agent");
+      div.textContent=String(m.text||"");
+      box.appendChild(div);
+    });
+    box.scrollTop=box.scrollHeight;
+  }
+
+  function saveAgentMessage(text,who){
+    let messages=[];
+    try{messages=JSON.parse(localStorage.getItem(AGENT_CHAT_KEY)||"[]")}catch(_){}
+    if(!Array.isArray(messages))messages=[];
+    messages.push({text:String(text),who:who==="user"?"user":"agent",ts:Date.now()});
+    if(messages.length>100)messages=messages.slice(-100);
+    localStorage.setItem(AGENT_CHAT_KEY,JSON.stringify(messages));
+    localStorage.setItem(AGENT_CHAT_DAY_KEY,today());
+  }
+
+  function scheduleAgentMidnightReset(){
+    const nextDay=shift(today(),1);
+    const delay=Math.max(1000,amsterdamMidnightUtcMs(nextDay)-Date.now());
+    setTimeout(()=>{
+      clearAgentChat();
+      scheduleAgentMidnightReset();
+    },delay);
+  }
+
+  function agentAdd(text,who="agent",persist=true){
     const box=$("agentMessages");
     if(!box)return;
     const div=document.createElement("div");
     div.className="agent-message "+who;
     div.textContent=text;
     box.appendChild(div);
-    while(box.children.length>6)box.removeChild(box.firstChild);
+    if(persist)saveAgentMessage(text,who);
     box.scrollTop=box.scrollHeight;
   }
 
@@ -305,6 +367,10 @@
   $("refresh").addEventListener("click",async()=>{await loadInitial(true);await loadCompetitorSales()});
   $("toggleAddCompetitor").addEventListener("click",()=>$("addCompetitorForm").classList.toggle("hidden"));
   $("saveCompetitor").addEventListener("click",async()=>{const name=$("compName").value.trim(),productUrl=$("compUrl").value.trim();if(!name||!productUrl){$("compFormMsg").textContent="Naam en product-URL zijn verplicht.";return}$("saveCompetitor").disabled=true;try{await request(COMP_API,{method:"POST",body:JSON.stringify({action:"add_target",name,productUrl,sellerName:$("compSeller").value.trim()||undefined,ean:$("compEan").value.trim()||undefined})});["compName","compUrl","compSeller","compEan"].forEach(id=>$(id).value="");$("compFormMsg").textContent="Concurrent toegevoegd.";await loadCompetitorSales()}catch(e){$("compFormMsg").textContent="Toevoegen is niet gelukt."}finally{$("saveCompetitor").disabled=false}});
+
+  loadAgentChat();
+  scheduleAgentMidnightReset();
+  document.addEventListener("visibilitychange",()=>{if(!document.hidden&&localStorage.getItem(AGENT_CHAT_DAY_KEY)!==today())clearAgentChat()});
 
   const t=today();$("overviewFrom").value=t;$("overviewTo").value=t;
   $("productFrom").value=shift(t,-1);$("productTo").value=shift(t,-1);
