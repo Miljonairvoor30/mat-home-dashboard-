@@ -46,3 +46,5 @@ jobs:
           MAT_HOME_WORKER_URL: https://kqizlvzcfncfyriwnmpl.supabase.co/functions/v1/competitor-stock-worker-api
           MAT_HOME_OIDC_TOKEN: ${{ steps.oidc.outputs.result }}
         run: node scripts/track-competitor-stock.mjs
+
+# manual retry 2026-09-23
