@@ -50,8 +50,8 @@ function latestWeekday(base:string,target:number){
 }
 function dateFromQuestion(q:string,base:string){
   if(q.includes("vandaag")) return base;
-  if(q.includes("gisteren")) return shiftDate(base,-1);
   if(q.includes("eergisteren")) return shiftDate(base,-2);
+  if(q.includes("gisteren")) return shiftDate(base,-1);
   const days:[string,number][]=[["zondag",0],["maandag",1],["dinsdag",2],["woensdag",3],["donderdag",4],["vrijdag",5],["zaterdag",6]];
   for(const [name,idx] of days) if(q.includes(name)) return latestWeekday(base,idx);
   const m=q.match(/\b(\d{1,2})[-\/ ](\d{1,2})(?:[-\/ ](\d{2,4}))?\b/);
@@ -221,6 +221,33 @@ Deno.serve(async(req)=>{
         ? "Laatste automatische concurrentmeting: "+tr.successes+"/"+tr.targets_total+" gelukt ("+tr.status+"). Zolang er geen twee betrouwbare voorraadmetingen per product zijn, behandel concurrent-sales als schatting en niet als feit."
         : "Nog geen automatische concurrentmeting beschikbaar.";
       return new Response(JSON.stringify({ok:true,answer,mode:"competitor"}),{headers:{...cors,"Cache-Control":"no-store"}});
+    }
+
+    const stopWords=new Set(["hoe","doet","gaat","met","het","de","een","van","voor","sales","orders","bezoeken","omzet","product","deze","week","vandaag","waarom","hoeveel","wat","is","zijn"]);
+    const qWords=q.split(/\s+/).filter((w:string)=>w.length>2&&!stopWords.has(w));
+    const matchedProduct=products.map((p:any)=>{
+      const name=norm((p.variant||"")+" "+(p.title||"")+" "+(p.ean||""));
+      const score=qWords.reduce((s:number,w:string)=>s+(name.includes(w)?1:0),0);
+      return {p,score,name:p.variant||p.title||p.ean||"Product"};
+    }).filter((x:any)=>x.score>0).sort((a:any,b:any)=>b.score-a.score)[0]||null;
+    if(matchedProduct && !refDay){
+      const pid=matchedProduct.p.id;
+      const curFrom=shiftDate(base,-6),prevFrom=shiftDate(base,-13),prevTo=shiftDate(base,-7);
+      const cur=productDays.filter(x=>x.productId===pid&&x.date>=curFrom&&x.date<=base);
+      const prev=productDays.filter(x=>x.productId===pid&&x.date>=prevFrom&&x.date<=prevTo);
+      const sum=(rows:ProductDay[])=>({
+        orders:rows.reduce((s,x)=>s+x.orders,0),
+        visits:rows.reduce((s,x)=>s+x.visits,0),
+        revenue:rows.reduce((s,x)=>s+x.revenue,0)
+      });
+      const a=sum(cur),b=sum(prev),convA=a.visits?a.orders/a.visits*100:0,convB=b.visits?b.orders/b.visits*100:0;
+      let answer=matchedProduct.name+": laatste 7 meetdagen "+a.orders+" sales uit "+a.visits+" bezoeken ("+nfmt(convA,1)+"% conversie), omzet "+money(a.revenue)+".";
+      if(prev.length) answer+=" Versus de 7 dagen ervoor: sales "+(pct(a.orders,b.orders)>=0?"+":"")+nfmt(pct(a.orders,b.orders),0)+"%, bezoeken "+(pct(a.visits,b.visits)>=0?"+":"")+nfmt(pct(a.visits,b.visits),0)+"%, conversie "+(convA-convB>=0?"+":"")+nfmt(convA-convB,1)+" pp.";
+      if(why){
+        if(convA<convB&&a.visits>=b.visits*.9) answer+=" De terugval zit vooral in conversie.";
+        else if(a.visits<b.visits*.8) answer+=" De terugval zit vooral in minder verkeer.";
+      }
+      return new Response(JSON.stringify({ok:true,answer,mode:"product_analysis"}),{headers:{...cors,"Cache-Control":"no-store"}});
     }
 
     if(refDay){
