@@ -29,22 +29,28 @@ function shiftDate(date:string,days:number){
   return d.toISOString().slice(0,10);
 }
 async function dailyOrders(from:string,to:string){
-  const counts=new Map<string,number>();
+  const counts=new Map<string,{orders:number,revenue:number}>();
   // Include the UTC boundary around Amsterdam midnight, then filter by local date.
-  const query=`orders?select=id,ordered_at&ordered_at=gte.${shiftDate(from,-1)}T00:00:00Z&ordered_at=lt.${shiftDate(to,1)}T00:00:00Z&order=ordered_at.asc,id.asc`;
+  const query=`orders?select=id,ordered_at,total_amount&ordered_at=gte.${shiftDate(from,-1)}T00:00:00Z&ordered_at=lt.${shiftDate(to,1)}T00:00:00Z&order=ordered_at.asc,id.asc`;
   let offset=0;
   while(true){
     const page=await api(`${query}&limit=1000&offset=${offset}`);
     if(!page.length) break;
     for(const order of page){
       const date=localDate(order.ordered_at);
-      if(inRange(date,from,to)) counts.set(date,(counts.get(date)||0)+1);
+      if(inRange(date,from,to)){
+        const v=counts.get(date)||{orders:0,revenue:0};
+        v.orders+=1;
+        v.revenue+=Number(order.total_amount||0);
+        counts.set(date,v);
+      }
     }
     offset+=page.length;
   }
   return Array.from({length:daysBetween(from,to)},(_,i)=>{
     const date=shiftDate(from,i);
-    return {date,orders:counts.get(date)||0};
+    const v=counts.get(date)||{orders:0,revenue:0};
+    return {date,orders:v.orders,revenue:Math.round(v.revenue*100)/100};
   });
 }
 const cors={
@@ -71,14 +77,16 @@ Deno.serve(async(req)=>{
     }catch(_){}
   }
 
-  const [products,orders,items,metrics,comps,snaps,syncs]=await Promise.all([
+  const [products,orders,items,metrics,comps,snaps,syncs,searchMetrics,trackingRuns]=await Promise.all([
     api("products?select=id,offer_id,ean,title,variant,active,current_price,stock,updated_at&order=active.desc,updated_at.desc"),
     api("orders?select=id,bol_order_id,ordered_at,total_amount,status&order=ordered_at.desc&limit=1000"),
     api("order_items?select=id,order_id,product_id,quantity,unit_price,status&limit=5000"),
     api("product_metrics?select=product_id,metric_date,visits,sales,conversion_rate,revenue,buy_box_percentage&order=metric_date.desc&limit=5000"),
     api("competitors?select=id,ean,seller_id,seller_name,offer_id,last_seen_at&limit=200"),
     api("competitor_snapshots?select=competitor_id,captured_at,price,delivery_date,is_best_offer,availability&order=captured_at.desc&limit=500"),
-    api("sync_runs?select=source,status,finished_at,records_written&order=started_at.desc&limit=5")
+    api("sync_runs?select=source,status,finished_at,records_written&order=started_at.desc&limit=5"),
+    api("search_term_metrics?select=search_term,metric_date,search_volume,country_code&country_code=eq.NL&order=metric_date.desc&limit=500"),
+    api("competitor_tracking_runs?select=started_at,finished_at,status,targets_total,successes,failures&order=started_at.desc&limit=1")
   ]);
 
   const today=localDate(new Date());
@@ -135,6 +143,80 @@ Deno.serve(async(req)=>{
   const ordersSeriesRange={from:hasRange?from:shiftDate(today,-13),to:hasRange?to:today};
   const ordersSeries=await dailyOrders(ordersSeriesRange.from,ordersSeriesRange.to);
 
+
+  const insightTo=latestMetricDate||shiftDate(today,-1);
+  const insightFrom=shiftDate(insightTo,-6);
+  const prevTo=shiftDate(insightFrom,-1);
+  const prevFrom=shiftDate(prevTo,-6);
+  const orders7=orders.filter((o:any)=>inRange(localDate(o.ordered_at),insightFrom,insightTo));
+  const ordersPrev7=orders.filter((o:any)=>inRange(localDate(o.ordered_at),prevFrom,prevTo));
+  const metrics7=metrics.filter((m:any)=>inRange(m.metric_date,insightFrom,insightTo));
+  const metricsPrev7=metrics.filter((m:any)=>inRange(m.metric_date,prevFrom,prevTo));
+  const visits7=metrics7.reduce((s:number,m:any)=>s+Number(m.visits||0),0);
+  const visitsPrev7=metricsPrev7.reduce((s:number,m:any)=>s+Number(m.visits||0),0);
+  const revenue7=orders7.reduce((s:number,o:any)=>s+Number(o.total_amount||0),0);
+  const revenuePrev7=ordersPrev7.reduce((s:number,o:any)=>s+Number(o.total_amount||0),0);
+  const conv7=visits7>0?orders7.length/visits7*100:0;
+  const convPrev7=visitsPrev7>0?ordersPrev7.length/visitsPrev7*100:0;
+  const pct=(cur:number,prev:number)=>prev>0?((cur-prev)/prev*100):(cur>0?100:0);
+
+  const perfByProduct=new Map<string,{visits:number,sales:number,revenue:number}>();
+  for(const m of metrics7){
+    const v=perfByProduct.get(m.product_id)||{visits:0,sales:0,revenue:0};
+    v.visits+=Number(m.visits||0);
+    v.sales+=Number(m.sales||0);
+    v.revenue+=Number(m.revenue||0);
+    perfByProduct.set(m.product_id,v);
+  }
+  const productInsightRows=activeProducts.map((p:any)=>{
+    const v=perfByProduct.get(p.id)||{visits:0,sales:0,revenue:0};
+    return {id:p.id,name:p.variant||p.title||p.ean,visits:v.visits,sales:v.sales,revenue:v.revenue,conversion:v.visits>0?v.sales/v.visits*100:0};
+  });
+  const topProduct=[...productInsightRows].sort((a:any,b:any)=>b.sales-a.sales||b.revenue-a.revenue)[0]||null;
+  const opportunity=[...productInsightRows].filter((p:any)=>p.visits>=5&&p.sales===0).sort((a:any,b:any)=>b.visits-a.visits)[0]
+    ||[...productInsightRows].filter((p:any)=>p.visits>=10).sort((a:any,b:any)=>a.conversion-b.conversion||b.visits-a.visits)[0]
+    ||null;
+
+  const latestSearchDate=(searchMetrics||[]).reduce((m:string,x:any)=>x.metric_date>m?x.metric_date:m,"");
+  const searchLatest=(searchMetrics||[]).filter((x:any)=>x.metric_date===latestSearchDate);
+  const searchPrevDate=latestSearchDate?shiftDate(latestSearchDate,-1):"";
+  const searchPrev=(searchMetrics||[]).filter((x:any)=>x.metric_date===searchPrevDate);
+  const searchPrevMap=new Map(searchPrev.map((x:any)=>[x.search_term,Number(x.search_volume||0)]));
+  const topSearchTerms=[...searchLatest].sort((a:any,b:any)=>Number(b.search_volume||0)-Number(a.search_volume||0)).slice(0,4).map((x:any)=>{
+    const prev=Number(searchPrevMap.get(x.search_term)||0);
+    return {term:x.search_term,volume:Number(x.search_volume||0),previous:searchPrevMap.has(x.search_term)?prev:null,changePct:prev>0?Math.round(pct(Number(x.search_volume||0),prev)*10)/10:null};
+  });
+  const trackedSearchVolume=searchLatest.reduce((s:number,x:any)=>s+Number(x.search_volume||0),0);
+  const trackedSearchPrev=searchPrev.reduce((s:number,x:any)=>s+Number(x.search_volume||0),0);
+  const weeklyTarget=14;
+  const businessInsights={
+    generatedAt:new Date().toISOString(),
+    period:{from:insightFrom,to:insightTo},
+    salesTargetPerDay:2,
+    weeklyTarget,
+    sales7d:orders7.length,
+    salesPerDay:Math.round((orders7.length/7)*100)/100,
+    targetProgressPct:Math.round((orders7.length/weeklyTarget*100)*10)/10,
+    salesTrendPct:Math.round(pct(orders7.length,ordersPrev7.length)*10)/10,
+    revenue7d:Math.round(revenue7*100)/100,
+    revenueTrendPct:Math.round(pct(revenue7,revenuePrev7)*10)/10,
+    visits7d:visits7,
+    visitsTrendPct:Math.round(pct(visits7,visitsPrev7)*10)/10,
+    conversion7d:Math.round(conv7*100)/100,
+    conversionTrendPp:Math.round((conv7-convPrev7)*100)/100,
+    topProduct,
+    opportunity,
+    searchVolume:{
+      latestDate:latestSearchDate||null,
+      trackedTerms:searchLatest.length,
+      trackedVolume:trackedSearchVolume,
+      trackedVolumeTrendPct:trackedSearchPrev>0?Math.round(pct(trackedSearchVolume,trackedSearchPrev)*10)/10:null,
+      topTerms:topSearchTerms,
+      note:"Exacte zoektermen; volumes overlappen mogelijk en zijn geen unieke marktgrootte."
+    },
+    competitorTracking:(trackingRuns||[])[0]||null
+  };
+
   const latestSnapByComp=new Map<string,any>();
   for(const s of snaps) if(!latestSnapByComp.has(s.competitor_id)) latestSnapByComp.set(s.competitor_id,s);
   const competitors=comps.map((c:any)=>({competitor:c,snapshot:latestSnapByComp.get(c.id)})).filter((x:any)=>x.snapshot).slice(0,12);
@@ -151,6 +233,6 @@ Deno.serve(async(req)=>{
     recentOrders:rangeOrders.slice(0,20),
     productPerformanceDate:performanceFrom===performanceTo?performanceFrom:null,
     productPerformanceRange:{from:performanceFrom,to:performanceTo},
-    products:productRows,visitsSeries,ordersSeries,ordersSeriesRange,competitors,lastSync
+    products:productRows,visitsSeries,ordersSeries,ordersSeriesRange,competitors,lastSync,businessInsights
   }),{headers:{...cors,"Cache-Control":"no-store"}});
 });
