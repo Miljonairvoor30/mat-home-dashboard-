@@ -109,6 +109,10 @@
       const avg=targets.reduce((a,t)=>a+Number(t.avgSalesPerDayRange||0),0);
       $("compRangeLabel").textContent=`Geschat · ${periodLabel(range.from,range.to)}`;
       $("comp24").textContent=num.format(est);$("comp7").textContent=dec.format(avg);$("compCount").textContent=num.format(targets.length);
+      const ts=d.trackingStatus;
+      $("compTrackingStatus").textContent=ts
+        ? `Automatische meting: ${num.format(ts.successes||0)}/${num.format(ts.targets_total||0)} gelukt · ${dateTime(ts.finished_at)}`
+        : "Automatische metingen worden ingericht.";
       $("competitorSales").innerHTML=targets.length?targets.map(t=>{
         const enough=Number(t.rangeSnapshotsCount||0)>=2;
         return `<article class="comp-card"><div class="comp-head"><div><b>${esc(t.name)}</b><div class="hint">${esc(t.sellerName||"Verkoper onbekend")}${t.ean?` · ${esc(t.ean)}`:""}</div></div><a href="${esc(t.productUrl||"#")}" target="_blank" rel="noopener">Open ↗</a></div>${t.restockDetectedRange?'<div class="badge">Aanvulling/voorraadcorrectie in geselecteerde periode</div>':""}${!enough?'<div class="hint" style="margin-top:12px">Nog onvoldoende metingen voor deze periode.</div>':`<div class="metrics"><div class="metric"><span>Voorraad nu</span><strong>${t.latestStock??"—"}</strong></div><div class="metric"><span>Geschat periode</span><strong>${num.format(t.estimatedSalesRange||0)}</strong></div><div class="metric"><span>Geschat / dag</span><strong>${dec.format(t.avgSalesPerDayRange||0)}</strong></div><div class="metric"><span>Metingen periode</span><strong>${num.format(t.rangeSnapshotsCount||0)}</strong></div></div>`}<div class="hint">Laatste meting: ${esc(dateTime(t.latestCapturedAt))}</div><form class="snapshot" data-target="${esc(t.id)}"><input type="number" min="0" step="1" inputmode="numeric" placeholder="Gemeten voorraad" required><button class="btn primary" type="submit">Opslaan</button></form></article>`;
