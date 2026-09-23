@@ -1,0 +1,51 @@
+name: Competitor stock tracker
+
+on:
+  schedule:
+    - cron: '15 9,21 * * *'
+      timezone: 'Europe/Amsterdam'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/competitor-stock.yml'
+      - 'scripts/track-competitor-stock.mjs'
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: competitor-stock-tracker
+  cancel-in-progress: false
+
+jobs:
+  track:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install Playwright
+        run: |
+          npm install --no-save playwright@1.55.0
+          npx playwright install --with-deps chromium
+
+      - name: Request GitHub OIDC token
+        id: oidc
+        uses: actions/github-script@v7
+        with:
+          script: return await core.getIDToken('mat-home-competitor-tracker')
+          result-encoding: string
+
+      - name: Measure competitor stock
+        env:
+          MAT_HOME_WORKER_URL: https://kqizlvzcfncfyriwnmpl.supabase.co/functions/v1/competitor-stock-worker-api
+          MAT_HOME_OIDC_TOKEN: ${{ steps.oidc.outputs.result }}
+        run: node scripts/track-competitor-stock.mjs
