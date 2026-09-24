@@ -181,7 +181,13 @@
           <div class="mini"><span>Geschat gemiddeld / dag</span><strong id="comp7">—</strong></div>
           <div class="mini"><span>Gevolgd</span><strong id="compCount">—</strong></div>
         </div>
-        <div id="compTrackingStatus" class="hint"></div>
+        <div class="form-box" id="compAutomation">
+          <b>Automatische voorraadcontrole</b>
+          <p class="hint">Gepland via Codex: dagelijks om 09:00 en 21:00 (Nederlandse tijd). De computer en Codex moeten beschikbaar zijn. Geslaagde metingen worden hier automatisch zichtbaar; de pagina controleert elke minuut op nieuwe gegevens.</p>
+          <div id="compTrackingStatus" class="hint" role="status"></div>
+          <div id="compLatestMeasurement" class="hint"></div>
+          <button id="reloadCompetitorMeasurements" class="btn" type="button">Laatste metingen laden</button>
+        </div>
         <details class="details"><summary>Hoe wordt dit geschat?</summary><p>Dit zijn geschatte sales op basis van voorraadmutaties. Een daling in gemeten voorraad telt als verkoopschatting. Aanvullingen, retouren, correcties en andere voorraadwijzigingen kunnen de uitkomst beïnvloeden; dit zijn geen officiële verkoopcijfers van bol.com.</p></details>
         <div id="competitorSales" class="competitor-grid"></div>
       </section>
@@ -195,6 +201,6 @@
     </main>
   </div>
   <script src="./config.js"></script>
-  <script src="./app.js?v=competitor-visibility-20260924"></script>
+  <script src="./app.js?v=competitor-auto-20260924"></script>
 </body>
 </html>

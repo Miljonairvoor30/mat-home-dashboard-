@@ -11,7 +11,7 @@
   const shift=(iso,days)=>{const d=new Date(iso+"T12:00:00Z");d.setUTCDate(d.getUTCDate()+days);return d.toISOString().slice(0,10)};
   const code=()=>localStorage.getItem("mh_code")||"";
   const headers=()=>({"x-dashboard-code":code(),"content-type":"application/json"});
-  let latestMetricDate=null,latestDashboard=null,latestCompetitorData=null;
+  let latestMetricDate=null,latestDashboard=null,latestCompetitorData=null,competitorLoading=false;
 
   async function request(url,options={}){
     const r=await fetch(url,{...options,headers:{...headers(),...(options.headers||{})},cache:"no-store"});
@@ -154,9 +154,11 @@
   }
 
   async function loadCompetitorSales(){
-    if(!code()||!COMP_API)return;
+    if(!code()||!COMP_API||competitorLoading)return;
     const preset=$("competitorPreset")?.value||"7d",range=makeRange(preset,"competitorFrom","competitorTo");
     if(!range)return;
+    competitorLoading=true;
+    $("reloadCompetitorMeasurements").disabled=true;
     try{
       const d=await request(withRange(COMP_API,range)),targets=d.targets||[];
       latestCompetitorData=d;
@@ -166,15 +168,20 @@
       $("compRangeLabel").textContent=`Geschat · ${periodLabel(range.from,range.to)} · ${usable.length}/${targets.length} meetbaar`;
       $("comp24").textContent=usable.length?num.format(est):"—";$("comp7").textContent=usable.length?dec.format(avg):"—";$("compCount").textContent=num.format(targets.length);
       const ts=d.trackingStatus;
+      const origin=ts?.source==="codex_browser_cart_probe"?"browsercontrole":"servercontrole";
       $("compTrackingStatus").textContent=ts
-        ? `Laatste servermeting: ${num.format(ts.successes||0)}/${num.format(ts.targets_total||0)} gelukt · ${dateTime(ts.finished_at)}${ts.status==="failed"?" · Mislukt; geen nieuwe metingen uit deze poging.":""}. ${targets.filter(t=>t.latestStock!=null).length}/${targets.length} producten hebben een opgeslagen voorraadmeting.`
-        : "Automatische metingen worden ingericht.";
+        ? `Laatste ${origin}: ${num.format(ts.successes||0)}/${num.format(ts.targets_total||0)} gelukt · ${dateTime(ts.finished_at)}${ts.status==="failed"?" · Mislukt; geen nieuwe voorraadwaarden opgeslagen":""}.`
+        : "Nog geen meetronde geregistreerd.";
+      const measured=targets.filter(t=>t.latestStock!=null);
+      const newest=measured.map(t=>t.latestCapturedAt).filter(Boolean).sort().at(-1);
+      $("compLatestMeasurement").textContent=`${measured.length}/${targets.length} producten met opgeslagen voorraad. Nieuwste geslaagde meting: ${dateTime(newest)}.`;
       $("competitorSales").innerHTML=targets.length?targets.map(t=>{
         const enough=Number(t.rangeSnapshotsCount||0)>=2;
         return `<article class="comp-card"><div class="comp-head"><div><b>${esc(t.name)}</b><div class="hint">${esc(t.sellerName||"Verkoper onbekend")}${t.ean?` · ${esc(t.ean)}`:""}</div></div><a href="${esc(t.productUrl||"#")}" target="_blank" rel="noopener">Open ↗</a></div>${t.restockDetectedRange?'<div class="badge">Aanvulling/voorraadcorrectie in geselecteerde periode</div>':""}<div class="metrics"><div class="metric"><span>Laatst gemeten voorraad</span><strong>${t.latestStock==null?"—":num.format(t.latestStock)}</strong></div><div class="metric"><span>Geschat periode</span><strong>${enough?num.format(t.estimatedSalesRange||0):"—"}</strong></div><div class="metric"><span>Geschat / dag</span><strong>${enough?dec.format(t.avgSalesPerDayRange||0):"—"}</strong></div><div class="metric"><span>Metingen periode</span><strong>${num.format(t.rangeSnapshotsCount||0)}</strong></div></div>${!enough?'<div class="hint">Verkoopschatting onbekend: minimaal twee bruikbare metingen nodig.</div>':""}<div class="hint">Laatste meting: ${esc(dateTime(t.latestCapturedAt))}</div><details class="details"><summary>Handmatige meting (optioneel)</summary><form class="snapshot" data-target="${esc(t.id)}"><input type="number" min="0" step="1" inputmode="numeric" placeholder="Gemeten voorraad" required><button class="btn primary" type="submit">Opslaan</button></form></details></article>`;
       }).join(""):'<div class="empty">Nog geen concurrenten gevolgd.</div>';
       document.querySelectorAll(".snapshot").forEach(form=>form.addEventListener("submit",async e=>{e.preventDefault();const input=form.querySelector("input"),value=Number(input.value);if(!Number.isInteger(value)||value<0)return;const btn=form.querySelector("button");btn.disabled=true;try{await request(COMP_API,{method:"POST",body:JSON.stringify({action:"record_snapshot",targetId:form.dataset.target,availableStock:value})});input.value="";await loadCompetitorSales()}catch(e){alert("Voorraadmeting opslaan is niet gelukt.")}finally{btn.disabled=false}}));
-    }catch(e){if(e.message!=="unauthorized")$("competitorSales").innerHTML='<div class="empty">Concurrent-schattingen konden niet geladen worden.</div>'}
+    }catch(e){if(e.message!=="unauthorized")$("compTrackingStatus").textContent="Nieuwe gegevens laden is niet gelukt. Eerder geladen waarden blijven staan."}
+    finally{competitorLoading=false;$("reloadCompetitorMeasurements").disabled=false}
   }
 
   const AGENT_CHAT_KEY="mh_agent_chat_v1";
@@ -393,6 +400,8 @@
   $("applyOverviewPeriod").addEventListener("click",applyOverview);
   $("applyProductPeriod").addEventListener("click",applyProducts);
   $("applyCompetitorPeriod").addEventListener("click",loadCompetitorSales);
+  $("reloadCompetitorMeasurements").addEventListener("click",loadCompetitorSales);
+  setInterval(()=>{if(!document.hidden&&code()&&!document.querySelector(".snapshot input:focus"))loadCompetitorSales()},60000);
 
   $("loginForm").addEventListener("submit",e=>{e.preventDefault();localStorage.setItem("mh_code",$("code").value.trim());Promise.all([loadInitial(),loadCompetitorSales(),loadAgentChat()])});
   $("logout").addEventListener("click",()=>{localStorage.removeItem("mh_code");$("code").value="";showLogin()});
@@ -401,7 +410,7 @@
   $("saveCompetitor").addEventListener("click",async()=>{const name=$("compName").value.trim(),productUrl=$("compUrl").value.trim();if(!name||!productUrl){$("compFormMsg").textContent="Naam en product-URL zijn verplicht.";return}$("saveCompetitor").disabled=true;try{await request(COMP_API,{method:"POST",body:JSON.stringify({action:"add_target",name,productUrl,sellerName:$("compSeller").value.trim()||undefined,ean:$("compEan").value.trim()||undefined})});["compName","compUrl","compSeller","compEan"].forEach(id=>$(id).value="");$("compFormMsg").textContent="Concurrent toegevoegd.";await loadCompetitorSales()}catch(e){$("compFormMsg").textContent="Toevoegen is niet gelukt."}finally{$("saveCompetitor").disabled=false}});
 
   scheduleAgentMidnightReset();
-  document.addEventListener("visibilitychange",()=>{if(!document.hidden)loadAgentChat()});
+  document.addEventListener("visibilitychange",()=>{if(!document.hidden){loadAgentChat();loadCompetitorSales()}});
 
   const t=today();$("overviewFrom").value=t;$("overviewTo").value=t;
   $("productFrom").value=shift(t,-1);$("productTo").value=shift(t,-1);
