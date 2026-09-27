@@ -1,0 +1,35 @@
+name: Refresh Bol visits
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/refresh-visits.yml'
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Request GitHub OIDC token
+        id: oidc
+        uses: actions/github-script@v7
+        with:
+          script: return await core.getIDToken('mat-home-visit-refresh')
+          result-encoding: string
+
+      - name: Refresh Bol product visits
+        env:
+          MAT_HOME_VISITS_URL: https://kqizlvzcfncfyriwnmpl.supabase.co/functions/v1/bol-refresh-visits
+          MAT_HOME_OIDC_TOKEN: ${{ steps.oidc.outputs.result }}
+        run: |
+          curl --fail --silent --show-error \
+            -X POST "$MAT_HOME_VISITS_URL" \
+            -H "Authorization: Bearer $MAT_HOME_OIDC_TOKEN" \
+            -H "Content-Type: application/json" \
+            --data '{}'
