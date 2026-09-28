@@ -12,6 +12,7 @@
   const code=()=>localStorage.getItem("mh_code")||"";
   const headers=()=>({"x-dashboard-code":code(),"content-type":"application/json"});
   let latestMetricDate=null,latestDashboard=null,latestCompetitorData=null,competitorLoading=false;
+  let dashboardLoading=false,dashboardRevision=0,overviewSelection=null,productSelection=null;
 
   async function request(url,options={}){
     const r=await fetch(url,{...options,headers:{...headers(),...(options.headers||{})},cache:"no-store"});
@@ -42,18 +43,41 @@
   }
   function periodLabel(from,to){return from===to?shortDate(from):`${shortDate(from)} t/m ${shortDate(to)}`}
 
+  function selectionRange(selection){
+    if(!selection)return null;
+    if(selection.preset==="custom")return {from:selection.from,to:selection.to};
+    return makeRange(selection.preset,selection.fromId,selection.toId);
+  }
+  function chosenSelection(prefix){
+    return {preset:$(prefix+"Preset").value,from:$(prefix+"From").value,to:$(prefix+"To").value,fromId:prefix+"From",toId:prefix+"To"};
+  }
   async function loadInitial(refresh=false){
     if(!code())return showLogin();
-    const banner=$("statusBanner");
+    if(dashboardLoading)return;
+    dashboardLoading=true;
+    const revision=dashboardRevision,session=code(),banner=$("statusBanner");
     if(refresh){banner.classList.remove("hidden");banner.textContent="Bol-data wordt ververst…";$("refresh").disabled=true}
     try{
       const d=await request(withRange(API,null,refresh));
+      if(code()!==session)return;
       latestMetricDate=d.kpis?.latestMetricDate||null;
+      const overviewRange=selectionRange(overviewSelection),productRange=selectionRange(productSelection);
+      const [overview,products]=await Promise.all([
+        overviewRange?request(withRange(API,overviewRange)):Promise.resolve(d),
+        productRange?request(withRange(API,productRange)):Promise.resolve(d)
+      ]);
+      if(code()!==session||revision!==dashboardRevision)return;
       latestDashboard=d;
-      renderOverview(d,false);renderProducts(d);renderBusinessInsights(d);showApp();
-      if(refresh){banner.textContent=d.refreshed?"Bol-data is opnieuw gesynchroniseerd.":"Dashboard geladen; sync gaf geen bevestiging.";setTimeout(()=>banner.classList.add("hidden"),2800)}
-    }catch(e){if(e.message!=="unauthorized"){banner.classList.remove("hidden");banner.textContent="Kon dashboarddata niet laden."}}
-    finally{$("refresh").disabled=false}
+      renderOverview(overview,!!overviewRange);renderProducts(products);renderBusinessInsights(d);showApp();
+      if(refresh){banner.textContent=d.refreshed?"Bol-data is opnieuw gesynchroniseerd.":"Synchronisatie loopt al of kon niet worden afgerond; de laatste gegevens worden getoond.";setTimeout(()=>banner.classList.add("hidden"),4000)}
+      else if(banner.textContent.startsWith("Automatisch bijwerken"))banner.classList.add("hidden");
+    }catch(e){if(e.message!=="unauthorized"&&code()===session){banner.classList.remove("hidden");banner.textContent="Automatisch bijwerken is tijdelijk niet gelukt. Je gegevens blijven staan; we proberen het opnieuw."}}
+    finally{dashboardLoading=false;$("refresh").disabled=false}
+  }
+  function refreshVisibleData(){
+    if(document.hidden||!code())return;
+    loadInitial();
+    if(!document.querySelector(".snapshot input:focus"))loadCompetitorSales();
   }
 
   function renderOverview(d,filtered=true){
@@ -70,9 +94,12 @@
     $("ordersChartTitle").textContent=`Bestellingen per dag · ${chartRange?periodLabel(chartRange.from,chartRange.to):label}`;
     $("chart").innerHTML=series.length?series.map(x=>`<div class="bar-col" tabindex="0" aria-label="${esc(shortDate(x.date))}: ${num.format(x.orders||0)} bestellingen, ${esc(euro.format(Number(x.revenue||0)))} omzet"><div class="chart-tip"><b>${esc(shortDate(x.date))}</b><span>${num.format(x.orders||0)} ${x.orders===1?"bestelling":"bestellingen"}</span><span>${esc(euro.format(Number(x.revenue||0)))} omzet</span></div><div class="bar" style="min-height:0;height:${Math.round((x.orders||0)/max*165)}px"></div><div class="x">${esc(shortDate(x.date))}</div></div>`).join(""):'<div class="empty">Geen besteldata voor deze periode.</div>';
     $("recentOrders").innerHTML=(d.recentOrders||[]).length?(d.recentOrders||[]).map(o=>`<div class="row"><div class="dot"></div><div><b>Order ${esc(String(o.bol_order_id||o.orderId||"").slice(-6))} · ${euro.format(Number(o.total_amount||o.amount||0))}</b><p>${esc(shortDate(String(o.ordered_at||"").slice(0,10)))} · ${esc(time(o.ordered_at||o.time))}</p></div></div>`).join(""):'<div class="empty">Geen orders in deze periode.</div>';
-    const ls=d.lastSync?.finished_at?dateTime(d.lastSync.finished_at):"onbekend";
+    const lastGood=d.lastSuccessfulSync||((d.lastSync?.status==="success")?d.lastSync:null);
+    const ls=lastGood?.finished_at?dateTime(lastGood.finished_at):"onbekend";
+    const syncStale=!lastGood?.finished_at||Date.now()-Date.parse(lastGood.finished_at)>15*60000;
+    const syncLabel=d.lastSync?.status==="error"?"Synchronisatie mislukt; nieuwe poging volgt":syncStale?"Gegevens wachten op synchronisatie":"Automatisch bijgewerkt";
     $("competitors").innerHTML=(d.competitors||[]).length?(d.competitors||[]).map(x=>`<div class="row"><div class="dot warn"></div><div><b>${esc(x.competitor?.seller_name||x.competitor?.seller_id||"Concurrent")} · ${euro.format(Number(x.snapshot?.price||0))}</b><p>EAN ${esc(x.competitor?.ean||"")}${x.snapshot?.is_best_offer?" · beste aanbod":" · concurrent"}</p></div></div>`).join(""):'<div class="empty">Nog geen directe concurrent op dezelfde EAN gevonden.</div>';
-    $("systemStatus").innerHTML=`<div class="row"><div class="dot"></div><div><b>${num.format(d.kpis?.activeProducts||0)} actieve producten</b><p>${num.format(d.kpis?.totalProducts||0)} producten bekend</p></div></div><div class="row"><div class="dot"></div><div><b>Bol API verbonden</b><p>Laatste sync: ${esc(ls)}</p></div></div><div class="row"><div class="dot"></div><div><b>Code onder eigen beheer</b><p>Frontend via GitHub Pages</p></div></div>`;
+    $("systemStatus").innerHTML=`<div class="row"><div class="dot"></div><div><b>${num.format(d.kpis?.activeProducts||0)} actieve producten</b><p>${num.format(d.kpis?.totalProducts||0)} producten bekend</p></div></div><div class="row"><div class="dot"></div><div><b>${esc(syncLabel)}</b><p>Laatste geslaagde sync: ${esc(ls)} · elke 5 minuten</p></div></div><div class="row"><div class="dot"></div><div><b>Code onder eigen beheer</b><p>Frontend via GitHub Pages</p></div></div>`;
   }
 
   function trendText(value,suffix="%"){
@@ -141,15 +168,19 @@
   async function applyOverview(){
     const preset=$("overviewPreset").value,range=makeRange(preset,"overviewFrom","overviewTo");
     if(!range)return alert("Kies een begin- en einddatum.");
+    overviewSelection=chosenSelection("overview");
+    const revision=++dashboardRevision;
     $("applyOverviewPeriod").disabled=true;
-    try{const d=await request(withRange(API,range));latestDashboard=d;renderOverview(d,true)}catch(e){if(e.message!=="unauthorized")alert("Periode laden is niet gelukt.")}
+    try{const d=await request(withRange(API,range));if(revision===dashboardRevision)renderOverview(d,true)}catch(e){if(e.message!=="unauthorized")alert("Periode laden is niet gelukt.")}
     finally{$("applyOverviewPeriod").disabled=false}
   }
   async function applyProducts(){
     const preset=$("productPreset").value,range=makeRange(preset,"productFrom","productTo");
     if(!range)return alert("Kies een begin- en einddatum.");
+    productSelection=chosenSelection("product");
+    const revision=++dashboardRevision;
     $("applyProductPeriod").disabled=true;
-    try{const d=await request(withRange(API,range));renderProducts(d)}catch(e){if(e.message!=="unauthorized")alert("Productperiode laden is niet gelukt.")}
+    try{const d=await request(withRange(API,range));if(revision===dashboardRevision)renderProducts(d)}catch(e){if(e.message!=="unauthorized")alert("Productperiode laden is niet gelukt.")}
     finally{$("applyProductPeriod").disabled=false}
   }
 
@@ -401,16 +432,16 @@
   $("applyProductPeriod").addEventListener("click",applyProducts);
   $("applyCompetitorPeriod").addEventListener("click",loadCompetitorSales);
   $("reloadCompetitorMeasurements").addEventListener("click",loadCompetitorSales);
-  setInterval(()=>{if(!document.hidden&&code()&&!document.querySelector(".snapshot input:focus"))loadCompetitorSales()},60000);
+  setInterval(refreshVisibleData,60000);
 
   $("loginForm").addEventListener("submit",e=>{e.preventDefault();localStorage.setItem("mh_code",$("code").value.trim());Promise.all([loadInitial(),loadCompetitorSales(),loadAgentChat()])});
-  $("logout").addEventListener("click",()=>{localStorage.removeItem("mh_code");$("code").value="";showLogin()});
+  $("logout").addEventListener("click",()=>{dashboardRevision++;overviewSelection=null;productSelection=null;localStorage.removeItem("mh_code");$("code").value="";showLogin()});
   $("refresh").addEventListener("click",async()=>{await loadInitial(true);await loadCompetitorSales()});
   $("toggleAddCompetitor").addEventListener("click",()=>$("addCompetitorForm").classList.toggle("hidden"));
   $("saveCompetitor").addEventListener("click",async()=>{const name=$("compName").value.trim(),productUrl=$("compUrl").value.trim();if(!name||!productUrl){$("compFormMsg").textContent="Naam en product-URL zijn verplicht.";return}$("saveCompetitor").disabled=true;try{await request(COMP_API,{method:"POST",body:JSON.stringify({action:"add_target",name,productUrl,sellerName:$("compSeller").value.trim()||undefined,ean:$("compEan").value.trim()||undefined})});["compName","compUrl","compSeller","compEan"].forEach(id=>$(id).value="");$("compFormMsg").textContent="Concurrent toegevoegd.";await loadCompetitorSales()}catch(e){$("compFormMsg").textContent="Toevoegen is niet gelukt."}finally{$("saveCompetitor").disabled=false}});
 
   scheduleAgentMidnightReset();
-  document.addEventListener("visibilitychange",()=>{if(!document.hidden){loadAgentChat();loadCompetitorSales()}});
+  document.addEventListener("visibilitychange",()=>{if(!document.hidden){loadAgentChat();refreshVisibleData()}});
 
   const t=today();$("overviewFrom").value=t;$("overviewTo").value=t;
   $("productFrom").value=shift(t,-1);$("productTo").value=shift(t,-1);
