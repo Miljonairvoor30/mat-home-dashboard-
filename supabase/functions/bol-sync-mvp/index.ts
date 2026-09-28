@@ -54,7 +54,28 @@ function periodDate(p:any){
   return `${String(y).padStart(4,"0")}-${String(m).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
 }
 
-Deno.serve(async()=>{
+const CRON_TOKEN_HASH="feed3099a07493041f62e9086c1875c93ac0e2e6cc845ceb864fda7365c7ca17";
+async function authorized(req:Request){
+  const bearer=req.headers.get("authorization")||"";
+  if(bearer===`Bearer ${SERVICE_ROLE}`)return true;
+  const token=req.headers.get("x-sync-token")||"";
+  if(!token)return false;
+  const digest=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(token));
+  return Array.from(new Uint8Array(digest)).map(x=>x.toString(16).padStart(2,"0")).join("")===CRON_TOKEN_HASH;
+}
+Deno.serve(async(req)=>{
+  if(!await authorized(req))return Response.json({ok:false,error:"unauthorized"},{status:401});
+  const input=req.method==="POST"?await req.json().catch(()=>({})):{};
+  const fast=input.mode==="fast";
+  // The unique partial index makes the claim atomic across manual and scheduled requests.
+  const stale=await db(`sync_runs?source=eq.bol_mvp&status=eq.running&started_at=lt.${new Date(Date.now()-10*60000).toISOString()}`,{
+    method:"PATCH",body:JSON.stringify({status:"error",finished_at:new Date().toISOString(),error_message:"Previous sync timed out"})
+  });
+  if(!stale.ok)return Response.json({ok:false,error:"Cannot recover stale sync"},{status:500});
+  const claim=await db("sync_runs",{method:"POST",headers:{Prefer:"return=representation"},body:JSON.stringify({source:"bol_mvp",status:"running"})});
+  if(claim.status===409)return Response.json({ok:true,skipped:true,reason:"sync_in_progress"});
+  if(!claim.ok)return Response.json({ok:false,error:"Cannot claim sync"},{status:500});
+  const run=(await claim.json())[0];
   const started=new Date().toISOString();
   let records=0;
   try{
@@ -158,7 +179,7 @@ Deno.serve(async()=>{
       return Boolean(nl?.forSale) && !o.onHoldByRetailer;
     }).slice(0,40);
 
-    for(const o of activeOffers){
+    for(const o of (fast?[]:activeOffers)){
       const prod=productByOffer.get(o.offerId);
       if(!prod) continue;
 
@@ -232,7 +253,7 @@ Deno.serve(async()=>{
       "ikea hemnes commode",
       "ikea malm commode"
     ];
-    for(const searchTerm of searchTerms){
+    for(const searchTerm of (fast?[]:searchTerms)){
       try{
         const u=new URL("https://api.bol.com/retailer/insights/search-terms");
         u.searchParams.set("search-term",searchTerm);
@@ -260,15 +281,15 @@ Deno.serve(async()=>{
       }
     }
 
-    await db("sync_runs",{
-      method:"POST",
+    await db(`sync_runs?id=eq.${run.id}`,{
+      method:"PATCH",
       headers:{"Prefer":"return=minimal"},
       body:JSON.stringify({source:"bol_mvp",started_at:started,finished_at:new Date().toISOString(),status:"success",records_written:records})
     });
-    return Response.json({ok:true,offers:allOffers.length,activeOffers:activeOffers.length,records});
+    return Response.json({ok:true,mode:fast?"fast":"full",offers:allOffers.length,activeOffers:activeOffers.length,records});
   }catch(e){
-    await db("sync_runs",{
-      method:"POST",
+    await db(`sync_runs?id=eq.${run.id}`,{
+      method:"PATCH",
       headers:{"Prefer":"return=minimal"},
       body:JSON.stringify({source:"bol_mvp",started_at:started,finished_at:new Date().toISOString(),status:"error",records_written:records,error_message:String(e)})
     }).catch(()=>{});

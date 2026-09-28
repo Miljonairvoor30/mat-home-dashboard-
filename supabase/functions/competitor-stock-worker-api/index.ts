@@ -83,8 +83,8 @@ Deno.serve(async(req)=>{
 
       for(const row of results.slice(0,100)){
         const targetId=String(row?.targetId||"");
-        const stock=Number(row?.availableStock);
-        const ok=allowed.has(targetId)&&Number.isInteger(stock)&&stock>=0&&stock<=10000;
+        const stock=row?.availableStock;
+        const ok=!row?.error&&typeof stock==="number"&&allowed.has(targetId)&&Number.isInteger(stock)&&stock>=0&&stock<=10000;
         if(ok){
           successful.push({
             target_id:targetId,

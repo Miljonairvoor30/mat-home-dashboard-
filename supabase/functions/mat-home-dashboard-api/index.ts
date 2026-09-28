@@ -73,20 +73,22 @@ Deno.serve(async(req)=>{
       const r=await fetch(`${SUPABASE_URL}/functions/v1/bol-sync-mvp`,{
         headers:{Authorization:`Bearer ${SERVICE_ROLE}`,apikey:SERVICE_ROLE}
       });
-      refreshed=r.ok;
+      const result=await r.json().catch(()=>({}));
+      refreshed=r.ok&&result.ok===true&&!result.skipped;
     }catch(_){}
   }
 
-  const [products,orders,items,metrics,comps,snaps,syncs,searchMetrics,trackingRuns]=await Promise.all([
+  const [products,orders,items,metrics,comps,snaps,syncs,searchMetrics,trackingRuns,lastSuccessfulSync]=await Promise.all([
     api("products?select=id,offer_id,ean,title,variant,active,current_price,stock,updated_at&order=active.desc,updated_at.desc"),
     api("orders?select=id,bol_order_id,ordered_at,total_amount,status&order=ordered_at.desc&limit=1000"),
     api("order_items?select=id,order_id,product_id,quantity,unit_price,status&limit=5000"),
     api("product_metrics?select=product_id,metric_date,visits,sales,conversion_rate,revenue,buy_box_percentage&order=metric_date.desc&limit=5000"),
     api("competitors?select=id,ean,seller_id,seller_name,offer_id,last_seen_at&limit=200"),
     api("competitor_snapshots?select=competitor_id,captured_at,price,delivery_date,is_best_offer,availability&order=captured_at.desc&limit=500"),
-    api("sync_runs?select=source,status,finished_at,records_written&order=started_at.desc&limit=5"),
+    api("sync_runs?select=source,status,finished_at,records_written&source=eq.bol_mvp&order=started_at.desc&limit=5"),
     api("search_term_metrics?select=search_term,metric_date,search_volume,country_code&country_code=eq.NL&order=metric_date.desc&limit=500"),
-    api("competitor_tracking_runs?select=started_at,finished_at,status,targets_total,successes,failures&order=started_at.desc&limit=1")
+    api("competitor_tracking_runs?select=started_at,finished_at,status,targets_total,successes,failures&order=started_at.desc&limit=1"),
+    api("sync_runs?select=source,status,finished_at,records_written&source=eq.bol_mvp&status=eq.success&order=finished_at.desc&limit=1")
   ]);
 
   const today=localDate(new Date());
@@ -238,7 +240,7 @@ Deno.serve(async(req)=>{
   const latestSnapByComp=new Map<string,any>();
   for(const s of snaps) if(!latestSnapByComp.has(s.competitor_id)) latestSnapByComp.set(s.competitor_id,s);
   const competitors=comps.map((c:any)=>({competitor:c,snapshot:latestSnapByComp.get(c.id)})).filter((x:any)=>x.snapshot).slice(0,12);
-  const lastSync=syncs.find((s:any)=>s.source==="bol_mvp"&&s.status==="success")||syncs[0]||null;
+  const lastSync=syncs[0]||null;
 
   return new Response(JSON.stringify({
     ok:true,refreshed,today,
@@ -251,6 +253,6 @@ Deno.serve(async(req)=>{
     recentOrders:rangeOrders.slice(0,20),
     productPerformanceDate:performanceFrom===performanceTo?performanceFrom:null,
     productPerformanceRange:{from:performanceFrom,to:performanceTo},
-    products:productRows,visitsSeries,ordersSeries,ordersSeriesRange,competitors,lastSync,businessInsights
+    products:productRows,visitsSeries,ordersSeries,ordersSeriesRange,competitors,lastSync,lastSuccessfulSync:lastSuccessfulSync[0]||null,businessInsights
   }),{headers:{...cors,"Cache-Control":"no-store"}});
 });
