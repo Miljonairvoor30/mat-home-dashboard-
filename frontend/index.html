@@ -149,58 +149,34 @@
 
       <section class="card">
         <div class="section-head">
-          <div><h2>Concurrent sales <span class="soft">(schatting)</span></h2><p class="section-sub">Geschat op basis van gemeten voorraadmutaties.</p></div>
-          <button id="toggleAddCompetitor" class="btn">+ Concurrent toevoegen</button>
-        </div>
-        <div class="period-controls comp-filter">
-          <select id="competitorPreset">
-            <option value="24h">Laatste 24 uur</option>
-            <option value="7d" selected>Laatste 7 dagen</option>
-            <option value="30d">Laatste 30 dagen</option>
-            <option value="custom">Aangepast</option>
-          </select>
-          <div id="competitorCustom" class="date-range hidden">
-            <input id="competitorFrom" type="date" aria-label="Concurrentie van datum">
-            <span>t/m</span>
-            <input id="competitorTo" type="date" aria-label="Concurrentie tot datum">
+          <div>
+            <h2>Conversiekansen · laatste 7 dagen</h2>
+            <p class="section-sub">Welke listings laten op bestaand verkeer de meeste ruimte zien richting 2,5% conversie. Sales komen uitsluitend uit echte orders.</p>
           </div>
-          <button id="applyCompetitorPeriod" class="btn">Toepassen</button>
-        </div>
-        <div id="addCompetitorForm" class="form-box hidden">
-          <div class="form-grid">
-            <input id="compName" placeholder="Naam *">
-            <input id="compUrl" placeholder="Bol.com product-URL *">
-            <input id="compSeller" placeholder="Verkopernaam (optioneel)">
-            <input id="compEan" placeholder="EAN (optioneel)" inputmode="numeric">
-          </div>
-          <button id="saveCompetitor" class="btn primary">Toevoegen</button>
-          <div id="compFormMsg" class="hint"></div>
         </div>
         <div class="mini-kpis">
-          <div class="mini"><span id="compRangeLabel">Geschat geselecteerde periode</span><strong id="comp24">—</strong></div>
-          <div class="mini"><span>Geschat gemiddeld / dag</span><strong id="comp7">—</strong></div>
-          <div class="mini"><span>Gevolgd</span><strong id="compCount">—</strong></div>
+          <div class="mini"><span>Listings onder 2,5%</span><strong id="oppCount">—</strong></div>
+          <div class="mini"><span>Bezoeken op deze listings</span><strong id="oppVisits">—</strong></div>
+          <div class="mini"><span>Extra sales nodig tot 2,5%</span><strong id="oppSalesGap">—</strong></div>
         </div>
-        <div class="form-box" id="compAutomation">
-          <b>Automatische voorraadcontrole</b>
-          <p class="hint">Gepland via Codex: dagelijks om 09:00 en 21:00 (Nederlandse tijd). De computer en Codex moeten beschikbaar zijn. Geslaagde metingen worden hier automatisch zichtbaar; de pagina controleert elke minuut op nieuwe gegevens.</p>
-          <div id="compTrackingStatus" class="hint" role="status"></div>
-          <div id="compLatestMeasurement" class="hint"></div>
-          <button id="reloadCompetitorMeasurements" class="btn" type="button">Laatste metingen laden</button>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Product</th><th>Bezoeken</th><th>Echte sales</th><th>Conversie</th><th>Extra sales tot 2,5%</th></tr></thead>
+            <tbody id="conversionOpportunities"><tr><td colspan="5" class="empty">Kansen worden geladen…</td></tr></tbody>
+          </table>
         </div>
-        <details class="details"><summary>Hoe wordt dit geschat?</summary><p>Dit zijn geschatte sales op basis van voorraadmutaties. Een daling in gemeten voorraad telt als verkoopschatting. Aanvullingen, retouren, correcties en andere voorraadwijzigingen kunnen de uitkomst beïnvloeden; dit zijn geen officiële verkoopcijfers van bol.com.</p></details>
-        <div id="competitorSales" class="competitor-grid"></div>
+        <p class="hint">Alleen listings met minimaal 10 bezoeken in de laatste 7 complete meetdagen worden meegenomen. Dit is een prioriteringssignaal, geen verkoopvoorspelling.</p>
       </section>
 
-      <section class="two-col">
-        <article class="card"><h2>Concurrentie · zelfde EAN</h2><div id="competitors"></div></article>
-        <article class="card"><h2>Status</h2><div id="systemStatus"></div></article>
+      <section class="card">
+        <h2>Status</h2>
+        <div id="systemStatus"></div>
       </section>
 
       <footer>* Bol publiceert bezoekdata niet seconde-tot-seconde. Het dashboard gebruikt de laatst beschikbare meetdag. Klantnamen en adressen worden niet getoond.</footer>
     </main>
   </div>
   <script src="./config.js"></script>
-  <script src="./app.js?v=competitor-auto-20260924"></script>
+  <script src="./app.js?v=conversion-opportunities-20260930"></script>
 </body>
 </html>
