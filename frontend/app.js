@@ -1,5 +1,5 @@
 (() => {
-  const cfg=window.MAT_HOME_CONFIG||{},API=cfg.dashboardApi,COMP_API=cfg.competitorSalesApi,AGENT_API=cfg.agentApi,CHAT_API=cfg.agentChatApi;
+  const cfg=window.MAT_HOME_CONFIG||{},API=cfg.dashboardApi,AGENT_API=cfg.agentApi,CHAT_API=cfg.agentChatApi;
   const $=id=>document.getElementById(id);
   const euro=new Intl.NumberFormat("nl-NL",{style:"currency",currency:"EUR"});
   const num=new Intl.NumberFormat("nl-NL"),dec=new Intl.NumberFormat("nl-NL",{minimumFractionDigits:1,maximumFractionDigits:1});
@@ -11,7 +11,7 @@
   const shift=(iso,days)=>{const d=new Date(iso+"T12:00:00Z");d.setUTCDate(d.getUTCDate()+days);return d.toISOString().slice(0,10)};
   const code=()=>localStorage.getItem("mh_code")||"";
   const headers=()=>({"x-dashboard-code":code(),"content-type":"application/json"});
-  let latestMetricDate=null,latestDashboard=null,latestCompetitorData=null,competitorLoading=false;
+  let latestMetricDate=null,latestDashboard=null;
   let dashboardLoading=false,dashboardRevision=0,overviewSelection=null,productSelection=null;
 
   async function request(url,options={}){
@@ -77,7 +77,6 @@
   function refreshVisibleData(){
     if(document.hidden||!code())return;
     loadInitial();
-    if(!document.querySelector(".snapshot input:focus"))loadCompetitorSales();
   }
 
   function renderOverview(d,filtered=true){
@@ -98,7 +97,6 @@
     const ls=lastGood?.finished_at?dateTime(lastGood.finished_at):"onbekend";
     const syncStale=!lastGood?.finished_at||Date.now()-Date.parse(lastGood.finished_at)>15*60000;
     const syncLabel=d.lastSync?.status==="error"?"Synchronisatie mislukt; nieuwe poging volgt":syncStale?"Gegevens wachten op synchronisatie":"Automatisch bijgewerkt";
-    $("competitors").innerHTML=(d.competitors||[]).length?(d.competitors||[]).map(x=>`<div class="row"><div class="dot warn"></div><div><b>${esc(x.competitor?.seller_name||x.competitor?.seller_id||"Concurrent")} · ${euro.format(Number(x.snapshot?.price||0))}</b><p>EAN ${esc(x.competitor?.ean||"")}${x.snapshot?.is_best_offer?" · beste aanbod":" · concurrent"}</p></div></div>`).join(""):'<div class="empty">Nog geen directe concurrent op dezelfde EAN gevonden.</div>';
     $("systemStatus").innerHTML=`<div class="row"><div class="dot"></div><div><b>${num.format(d.kpis?.activeProducts||0)} actieve producten</b><p>${num.format(d.kpis?.totalProducts||0)} producten bekend</p></div></div><div class="row"><div class="dot"></div><div><b>${esc(syncLabel)}</b><p>Laatste geslaagde sync: ${esc(ls)} · elke 5 minuten</p></div></div><div class="row"><div class="dot"></div><div><b>Code onder eigen beheer</b><p>Frontend via GitHub Pages</p></div></div>`;
   }
 
@@ -145,8 +143,6 @@
     }
     if(Number(i.visitsTrendPct||0)<-10) actions.push({kind:"watch",title:"Verkeer daalt",text:`Bezoeken liggen ${Math.abs(Number(i.visitsTrendPct||0)).toFixed(1).replace(".",",")}% onder de vorige 7 dagen. Focus op vindbaarheid en relevante zoektermen voordat je prijs verlaagt.`});
     else if(Number(i.visitsTrendPct||0)>10) actions.push({kind:"good",title:"Meer bereik",text:`Bezoeken zijn ${dec.format(i.visitsTrendPct||0)}% gestegen. Controleer vooral of de conversie meegroeit; anders zit de winst in de listing zelf.`});
-    const ct=i.competitorTracking;
-    if(ct&&Number(ct.successes||0)<Number(ct.targets_total||0)) actions.push({kind:"info",title:"Concurrentiedata",text:`De laatste automatische voorraadmeting haalde ${num.format(ct.successes||0)}/${num.format(ct.targets_total||0)} concurrenten. Concurrent-sales blijven daarom een schatting zodra voldoende metingen beschikbaar zijn.`});
     $("insightActions").innerHTML=actions.slice(0,4).map(a=>`<div class="insight-action ${a.kind}"><div class="insight-icon"></div><div><b>${esc(a.title)}</b><p>${esc(a.text)}</p></div></div>`).join("");
 
     const s=i.searchVolume||{},terms=s.topTerms||[];
@@ -155,6 +151,17 @@
       const trend=s.trackedVolumeTrendPct==null?"":` · ${trendText(s.trackedVolumeTrendPct)} vs dag ervoor`;
       $("searchVolumeBox").innerHTML=`<div class="search-head"><div><strong>${num.format(s.trackedVolume||0)}</strong><span>zoekopdrachten in gevolgde termen${trend}</span></div><small>Meetdag ${esc(shortDate(s.latestDate))}</small></div><div class="search-terms">${terms.map(t=>`<div class="search-term"><span>${esc(t.term)}</span><strong>${num.format(t.volume||0)}</strong><small>${t.changePct==null?"":trendText(t.changePct)}</small></div>`).join("")}</div><div class="search-note">${esc(s.note||"")}</div>`;
     }
+
+    const opportunities=i.conversionOpportunities||[];
+    const oppVisits=opportunities.reduce((sum,p)=>sum+Number(p.visits||0),0);
+    const oppGap=opportunities.reduce((sum,p)=>sum+Number(p.salesGap||0),0);
+    $("oppCount").textContent=num.format(opportunities.length);
+    $("oppVisits").textContent=num.format(oppVisits);
+    $("oppSalesGap").textContent=num.format(oppGap);
+    $("conversionOpportunities").innerHTML=opportunities.length?opportunities.map(p=>{
+      const conv=Number(p.conversion||0).toLocaleString("nl-NL",{minimumFractionDigits:2,maximumFractionDigits:2});
+      return `<tr><td><b>${esc(p.name||"Onbekend product")}</b></td><td>${num.format(p.visits||0)}</td><td>${num.format(p.sales||0)}</td><td>${conv}%</td><td><b>+${num.format(p.salesGap||0)}</b></td></tr>`;
+    }).join(""):'<tr><td colspan="5" class="empty">Geen listing met minimaal 10 bezoeken zit onder 2,5% conversie.</td></tr>';
   }
 
   function renderProducts(d){
@@ -182,37 +189,6 @@
     $("applyProductPeriod").disabled=true;
     try{const d=await request(withRange(API,range));if(revision===dashboardRevision)renderProducts(d)}catch(e){if(e.message!=="unauthorized")alert("Productperiode laden is niet gelukt.")}
     finally{$("applyProductPeriod").disabled=false}
-  }
-
-  async function loadCompetitorSales(){
-    if(!code()||!COMP_API||competitorLoading)return;
-    const preset=$("competitorPreset")?.value||"7d",range=makeRange(preset,"competitorFrom","competitorTo");
-    if(!range)return;
-    competitorLoading=true;
-    $("reloadCompetitorMeasurements").disabled=true;
-    try{
-      const d=await request(withRange(COMP_API,range)),targets=d.targets||[];
-      latestCompetitorData=d;
-      const usable=targets.filter(t=>Number(t.rangeSnapshotsCount||0)>=2);
-      const est=usable.reduce((a,t)=>a+Number(t.estimatedSalesRange||0),0);
-      const avg=usable.reduce((a,t)=>a+Number(t.avgSalesPerDayRange||0),0);
-      $("compRangeLabel").textContent=`Geschat · ${periodLabel(range.from,range.to)} · ${usable.length}/${targets.length} meetbaar`;
-      $("comp24").textContent=usable.length?num.format(est):"—";$("comp7").textContent=usable.length?dec.format(avg):"—";$("compCount").textContent=num.format(targets.length);
-      const ts=d.trackingStatus;
-      const origin=ts?.source==="codex_browser_cart_probe"?"browsercontrole":"servercontrole";
-      $("compTrackingStatus").textContent=ts
-        ? `Laatste ${origin}: ${num.format(ts.successes||0)}/${num.format(ts.targets_total||0)} gelukt · ${dateTime(ts.finished_at)}${ts.status==="failed"?" · Mislukt; geen nieuwe voorraadwaarden opgeslagen":""}.`
-        : "Nog geen meetronde geregistreerd.";
-      const measured=targets.filter(t=>t.latestStock!=null);
-      const newest=measured.map(t=>t.latestCapturedAt).filter(Boolean).sort().at(-1);
-      $("compLatestMeasurement").textContent=`${measured.length}/${targets.length} producten met opgeslagen voorraad. Nieuwste geslaagde meting: ${dateTime(newest)}.`;
-      $("competitorSales").innerHTML=targets.length?targets.map(t=>{
-        const enough=Number(t.rangeSnapshotsCount||0)>=2;
-        return `<article class="comp-card"><div class="comp-head"><div><b>${esc(t.name)}</b><div class="hint">${esc(t.sellerName||"Verkoper onbekend")}${t.ean?` · ${esc(t.ean)}`:""}</div></div><a href="${esc(t.productUrl||"#")}" target="_blank" rel="noopener">Open ↗</a></div>${t.restockDetectedRange?'<div class="badge">Aanvulling/voorraadcorrectie in geselecteerde periode</div>':""}<div class="metrics"><div class="metric"><span>Laatst gemeten voorraad</span><strong>${t.latestStock==null?"—":num.format(t.latestStock)}</strong></div><div class="metric"><span>Geschat periode</span><strong>${enough?num.format(t.estimatedSalesRange||0):"—"}</strong></div><div class="metric"><span>Geschat / dag</span><strong>${enough?dec.format(t.avgSalesPerDayRange||0):"—"}</strong></div><div class="metric"><span>Metingen periode</span><strong>${num.format(t.rangeSnapshotsCount||0)}</strong></div></div>${!enough?'<div class="hint">Verkoopschatting onbekend: minimaal twee bruikbare metingen nodig.</div>':""}<div class="hint">Laatste meting: ${esc(dateTime(t.latestCapturedAt))}</div><details class="details"><summary>Handmatige meting (optioneel)</summary><form class="snapshot" data-target="${esc(t.id)}"><input type="number" min="0" step="1" inputmode="numeric" placeholder="Gemeten voorraad" required><button class="btn primary" type="submit">Opslaan</button></form></details></article>`;
-      }).join(""):'<div class="empty">Nog geen concurrenten gevolgd.</div>';
-      document.querySelectorAll(".snapshot").forEach(form=>form.addEventListener("submit",async e=>{e.preventDefault();const input=form.querySelector("input"),value=Number(input.value);if(!Number.isInteger(value)||value<0)return;const btn=form.querySelector("button");btn.disabled=true;try{await request(COMP_API,{method:"POST",body:JSON.stringify({action:"record_snapshot",targetId:form.dataset.target,availableStock:value})});input.value="";await loadCompetitorSales()}catch(e){alert("Voorraadmeting opslaan is niet gelukt.")}finally{btn.disabled=false}}));
-    }catch(e){if(e.message!=="unauthorized")$("compTrackingStatus").textContent="Nieuwe gegevens laden is niet gelukt. Eerder geladen waarden blijven staan."}
-    finally{competitorLoading=false;$("reloadCompetitorMeasurements").disabled=false}
   }
 
   const AGENT_CHAT_KEY="mh_agent_chat_v1";
@@ -381,19 +357,10 @@
       return "Hoogste gevolgde zoekterm: “"+terms[0].term+"” met "+num.format(terms[0].volume||0)+" zoekopdrachten op de laatste meetdag. Ik volg "+num.format(s.trackedTerms||terms.length)+" termen.";
     }
 
-    if(/concurrent/.test(q)){
-      const targets=latestCompetitorData?.targets||[];
-      const usable=targets.filter(function(t){return Number(t.rangeSnapshotsCount||0)>=2});
-      const est=usable.reduce(function(s,t){return s+Number(t.estimatedSalesRange||0)},0);
-      return usable.length
-        ? "Voor "+usable.length+" concurrenten zijn voldoende metingen beschikbaar; gezamenlijke geschatte sales in de gekozen periode: "+num.format(est)+". Dit blijft een voorraadschatting."
-        : "Er zijn nog onvoldoende dubbele voorraadmetingen om betrouwbare concurrent-sales te schatten.";
-    }
-
     const p=productMatch(q);
     if(p)return (p.variant||p.title)+": "+num.format(p.visits||0)+" bezoeken en "+num.format(p.ordersPerformance||0)+" orders in de momenteel gekozen productperiode.";
 
-    return "Ik kan nu korte vragen beantwoorden over sales, omzet, weekdoel, bezoeken, conversie, producten, zoekvolume en concurrenten.";
+    return "Ik kan nu korte vragen beantwoorden over sales, omzet, weekdoel, bezoeken, conversie, producten en zoekvolume.";
   }
 
   async function askAgent(q){
@@ -427,24 +394,19 @@
     btn.addEventListener("click",function(){askAgent(btn.dataset.agentQ)});
   });
   function bindCustom(selectId,boxId){$(selectId).addEventListener("change",()=>$(boxId).classList.toggle("hidden",$(selectId).value!=="custom"))}
-  bindCustom("overviewPreset","overviewCustom");bindCustom("productPreset","productCustom");bindCustom("competitorPreset","competitorCustom");
+  bindCustom("overviewPreset","overviewCustom");bindCustom("productPreset","productCustom");
   $("applyOverviewPeriod").addEventListener("click",applyOverview);
   $("applyProductPeriod").addEventListener("click",applyProducts);
-  $("applyCompetitorPeriod").addEventListener("click",loadCompetitorSales);
-  $("reloadCompetitorMeasurements").addEventListener("click",loadCompetitorSales);
   setInterval(refreshVisibleData,60000);
 
-  $("loginForm").addEventListener("submit",e=>{e.preventDefault();localStorage.setItem("mh_code",$("code").value.trim());Promise.all([loadInitial(),loadCompetitorSales(),loadAgentChat()])});
+  $("loginForm").addEventListener("submit",e=>{e.preventDefault();localStorage.setItem("mh_code",$("code").value.trim());Promise.all([loadInitial(),loadAgentChat()])});
   $("logout").addEventListener("click",()=>{dashboardRevision++;overviewSelection=null;productSelection=null;localStorage.removeItem("mh_code");$("code").value="";showLogin()});
-  $("refresh").addEventListener("click",async()=>{await loadInitial(true);await loadCompetitorSales()});
-  $("toggleAddCompetitor").addEventListener("click",()=>$("addCompetitorForm").classList.toggle("hidden"));
-  $("saveCompetitor").addEventListener("click",async()=>{const name=$("compName").value.trim(),productUrl=$("compUrl").value.trim();if(!name||!productUrl){$("compFormMsg").textContent="Naam en product-URL zijn verplicht.";return}$("saveCompetitor").disabled=true;try{await request(COMP_API,{method:"POST",body:JSON.stringify({action:"add_target",name,productUrl,sellerName:$("compSeller").value.trim()||undefined,ean:$("compEan").value.trim()||undefined})});["compName","compUrl","compSeller","compEan"].forEach(id=>$(id).value="");$("compFormMsg").textContent="Concurrent toegevoegd.";await loadCompetitorSales()}catch(e){$("compFormMsg").textContent="Toevoegen is niet gelukt."}finally{$("saveCompetitor").disabled=false}});
+  $("refresh").addEventListener("click",async()=>{await loadInitial(true)});
 
   scheduleAgentMidnightReset();
   document.addEventListener("visibilitychange",()=>{if(!document.hidden){loadAgentChat();refreshVisibleData()}});
 
   const t=today();$("overviewFrom").value=t;$("overviewTo").value=t;
   $("productFrom").value=shift(t,-1);$("productTo").value=shift(t,-1);
-  $("competitorFrom").value=shift(t,-6);$("competitorTo").value=t;
-  if(code()){Promise.all([loadInitial(),loadCompetitorSales(),loadAgentChat()])}else showLogin();
+  if(code()){Promise.all([loadInitial(),loadAgentChat()])}else showLogin();
 })();
