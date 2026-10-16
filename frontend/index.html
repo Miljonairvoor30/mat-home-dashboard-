@@ -11,7 +11,7 @@
   <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png?v=moneybag-1">
   <link rel="icon" type="image/png" href="./apple-touch-icon.png?v=moneybag-1">
   <title>MAT Home Dashboard</title>
-  <link rel="stylesheet" href="./styles.css?v=agent-1">
+  <link rel="stylesheet" href="./styles.css?v=returns-1">
 </head>
 <body>
   <div id="login" class="login-screen">
@@ -43,7 +43,7 @@
       <section class="period-panel">
         <div>
           <b>Dashboardperiode</b>
-          <span>Omzet, orders en dagelijkse prestaties</span>
+          <span>Omzet, orders en retouren in de gekozen periode</span>
         </div>
         <div class="period-controls">
           <select id="overviewPreset">
@@ -66,6 +66,8 @@
       <section class="kpis">
         <article class="card"><div class="label">Omzet vandaag</div><div id="revenue" class="value">—</div><div id="revenueSub" class="hint"></div></article>
         <article class="card"><div class="label">Orders vandaag</div><div id="orders" class="value">—</div><div class="hint">Retailer API</div></article>
+        <article class="card returns-card"><div class="label">Openstaande retouren</div><div id="returnsOpen" class="value" aria-live="polite">—</div><div class="hint">Nog af te handelen · alle perioden · artikelen</div></article>
+        <article class="card returns-card"><div id="returnsPeriodLabel" class="label">Totale retouren</div><div id="returnsTotal" class="value" aria-live="polite">—</div><div class="hint">Aangemeld in deze periode · open + afgehandeld · artikelen</div><div id="returnsSyncStatus" class="hint" role="status"></div></article>
         <article class="card assistant-card">
           <div class="assistant-head">
             <div>
@@ -177,6 +179,7 @@
     </main>
   </div>
   <script src="./config.js"></script>
-  <script src="./app.js?v=conversion-opportunities-20260930"></script>
+  <script src="./app.js?v=returns-20261016"></script>
 </body>
 </html>
+

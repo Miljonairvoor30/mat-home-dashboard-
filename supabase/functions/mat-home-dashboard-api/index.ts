@@ -53,6 +53,64 @@ async function dailyOrders(from:string,to:string){
     return {date,orders:v.orders,revenue:Math.round(v.revenue*100)/100};
   });
 }
+type ReturnSyncState={lastSyncedAt:string|null,stale:boolean};
+let returnSyncInFlight:Promise<string>|null=null;
+
+async function syncReturns(force=false):Promise<ReturnSyncState>{
+  let lastSyncedAt:string|null=null;
+  try{
+    const runs=await api("sync_runs?select=finished_at&source=eq.bol_returns&status=eq.success&order=finished_at.desc&limit=1");
+    lastSyncedAt=runs[0]?.finished_at||null;
+    if(!force&&lastSyncedAt&&Date.now()-Date.parse(lastSyncedAt)<5*60000){
+      return {lastSyncedAt,stale:false};
+    }
+    // Reuse the existing Bol synchronizer, including both open and handled returns.
+    // Concurrent requests within this worker share the same synchronization.
+    if(!returnSyncInFlight){
+      returnSyncInFlight=(async()=>{
+        const response=await fetch(`${SUPABASE_URL}/functions/v1/bol-sync-returns`,{
+          headers:{Authorization:`Bearer ${SERVICE_ROLE}`,apikey:SERVICE_ROLE},
+          signal:AbortSignal.timeout(25000)
+        });
+        const result=await response.json();
+        if(!response.ok||result.ok!==true)throw new Error("Return synchronization failed");
+        return new Date().toISOString();
+      })().finally(()=>{returnSyncInFlight=null;});
+    }
+    return {lastSyncedAt:await returnSyncInFlight,stale:false};
+  }catch(_){
+    return {lastSyncedAt,stale:true};
+  }
+}
+
+async function returnSummary(from:string,to:string,sync:ReturnSyncState){
+  try{
+    let open=0,total=0,offset=0;
+    // No orders join: a return may be registered months after its original order.
+    // Paginate all return items so open returns also include older periods.
+    while(true){
+      const rows=await api(`returns?select=id,quantity,registered_at,return_date,handled:raw_data->>handled&order=id.asc&limit=1000&offset=${offset}`);
+      if(!rows.length)break;
+      for(const row of rows){
+        const quantity=Number(row.quantity);
+        const registeredAt=row.registered_at||row.return_date;
+        const handled=row.handled;
+        if(row.quantity==null||!Number.isFinite(quantity)||quantity<0||!registeredAt||!Number.isFinite(Date.parse(registeredAt))||![true,false,"true","false"].includes(handled)){
+          throw new Error("Incomplete return data");
+        }
+        if(handled===false||handled==="false")open+=quantity;
+        if(inRange(localDate(registeredAt),from,to))total+=quantity;
+      }
+      offset+=rows.length;
+    }
+    // Without a successful sync, an empty table is not evidence of zero returns.
+    if(!sync.lastSyncedAt)throw new Error("Returns have not been synchronized");
+    return {available:true,open,total,unit:"articles",from,to,...sync};
+  }catch(_){
+    return {available:false,open:null,total:null,unit:"articles",from,to,...sync};
+  }
+}
+
 const cors={
   "Access-Control-Allow-Origin":"*",
   "Access-Control-Allow-Headers":"content-type,x-dashboard-code",
@@ -78,7 +136,7 @@ Deno.serve(async(req)=>{
     }catch(_){}
   }
 
-  const [products,orders,items,metrics,comps,snaps,syncs,searchMetrics,trackingRuns,lastSuccessfulSync]=await Promise.all([
+  const [products,orders,items,metrics,comps,snaps,syncs,searchMetrics,trackingRuns,lastSuccessfulSync,returnSync]=await Promise.all([
     api("products?select=id,offer_id,ean,title,variant,active,current_price,stock,updated_at&order=active.desc,updated_at.desc"),
     api("orders?select=id,bol_order_id,ordered_at,total_amount,status&order=ordered_at.desc&limit=1000"),
     api("order_items?select=id,order_id,product_id,quantity,unit_price,status&limit=5000"),
@@ -88,7 +146,8 @@ Deno.serve(async(req)=>{
     api("sync_runs?select=source,status,finished_at,records_written&source=eq.bol_mvp&order=started_at.desc&limit=5"),
     api("search_term_metrics?select=search_term,metric_date,search_volume,country_code&country_code=eq.NL&order=metric_date.desc&limit=500"),
     api("competitor_tracking_runs?select=started_at,finished_at,status,targets_total,successes,failures&order=started_at.desc&limit=1"),
-    api("sync_runs?select=source,status,finished_at,records_written&source=eq.bol_mvp&status=eq.success&order=finished_at.desc&limit=1")
+    api("sync_runs?select=source,status,finished_at,records_written&source=eq.bol_mvp&status=eq.success&order=finished_at.desc&limit=1"),
+    syncReturns(url.searchParams.get("refresh")==="1")
   ]);
 
   const today=localDate(new Date());
@@ -103,7 +162,7 @@ Deno.serve(async(req)=>{
   const rangeMetrics=metrics.filter((m:any)=>inRange(m.metric_date,from,to));
   const revenueRange=rangeOrders.reduce((s:number,o:any)=>s+Number(o.total_amount||0),0);
   const visitsRange=rangeMetrics.reduce((s:number,m:any)=>s+Number(m.visits||0),0);
-  const salesRange=rangeMetrics.reduce((s:number,m:any)=>s+Number(m.sales||0),0);
+  const salesRange=rangeOrders.length;
   const conversionRange=visitsRange>0?salesRange/visitsRange*100:0;
   const activeProducts=products.filter((p:any)=>p.active);
 
@@ -143,7 +202,10 @@ Deno.serve(async(req)=>{
     visits:metrics.filter((m:any)=>m.metric_date===d).reduce((s:number,m:any)=>s+Number(m.visits||0),0)
   }));
   const ordersSeriesRange={from:hasRange?from:shiftDate(today,-13),to:hasRange?to:today};
-  const ordersSeries=await dailyOrders(ordersSeriesRange.from,ordersSeriesRange.to);
+  const [ordersSeries,returns]=await Promise.all([
+    dailyOrders(ordersSeriesRange.from,ordersSeriesRange.to),
+    returnSummary(from,to,returnSync)
+  ]);
 
 
   const insightTo=latestMetricDate||shiftDate(today,-1);
@@ -162,22 +224,37 @@ Deno.serve(async(req)=>{
   const convPrev7=visitsPrev7>0?ordersPrev7.length/visitsPrev7*100:0;
   const pct=(cur:number,prev:number)=>prev>0?((cur-prev)/prev*100):(cur>0?100:0);
 
-  const perfByProduct=new Map<string,{visits:number,sales:number,revenue:number}>();
+  const visitsByProduct7=new Map<string,number>();
   for(const m of metrics7){
-    const v=perfByProduct.get(m.product_id)||{visits:0,sales:0,revenue:0};
-    v.visits+=Number(m.visits||0);
-    v.sales+=Number(m.sales||0);
-    v.revenue+=Number(m.revenue||0);
-    perfByProduct.set(m.product_id,v);
+    visitsByProduct7.set(m.product_id,(visitsByProduct7.get(m.product_id)||0)+Number(m.visits||0));
   }
+  const orderIds7=new Set(orders7.map((o:any)=>o.id));
+  const actualByProduct7=new Map<string,{sales:number,revenue:number}>();
+  for(const it of items){
+    if(!orderIds7.has(it.order_id)||!it.product_id||String(it.status||"").toUpperCase()==="CANCELLED") continue;
+    const v=actualByProduct7.get(it.product_id)||{sales:0,revenue:0};
+    v.sales+=Number(it.quantity||0);
+    v.revenue+=Number(it.quantity||0)*Number(it.unit_price||0);
+    actualByProduct7.set(it.product_id,v);
+  }
+  const targetConversion=2.5;
   const productInsightRows=activeProducts.map((p:any)=>{
-    const v=perfByProduct.get(p.id)||{visits:0,sales:0,revenue:0};
-    return {id:p.id,name:p.variant||p.title||p.ean,visits:v.visits,sales:v.sales,revenue:v.revenue,conversion:v.visits>0?v.sales/v.visits*100:0};
+    const visits=visitsByProduct7.get(p.id)||0;
+    const a=actualByProduct7.get(p.id)||{sales:0,revenue:0};
+    const conversion=visits>0?a.sales/visits*100:0;
+    const targetSales=visits>0?Math.ceil(visits*targetConversion/100):0;
+    const salesGap=Math.max(0,targetSales-a.sales);
+    return {
+      id:p.id,name:p.variant||p.title||p.ean,visits,sales:a.sales,revenue:a.revenue,
+      price:Number(p.current_price||0),conversion,targetSales,salesGap
+    };
   });
-  const topProduct=[...productInsightRows].sort((a:any,b:any)=>b.sales-a.sales||b.revenue-a.revenue)[0]||null;
-  const opportunity=[...productInsightRows].filter((p:any)=>p.visits>=5&&p.sales===0).sort((a:any,b:any)=>b.visits-a.visits)[0]
-    ||[...productInsightRows].filter((p:any)=>p.visits>=10).sort((a:any,b:any)=>a.conversion-b.conversion||b.visits-a.visits)[0]
-    ||null;
+  const topProduct=[...productInsightRows].sort((a:any,b:any)=>b.sales-a.sales||b.revenue-a.revenue||b.visits-a.visits)[0]||null;
+  const conversionOpportunities=[...productInsightRows]
+    .filter((p:any)=>p.visits>=10&&p.conversion<targetConversion)
+    .sort((a:any,b:any)=>b.salesGap-a.salesGap||b.visits-a.visits)
+    .slice(0,8);
+  const opportunity=conversionOpportunities[0]||null;
 
   const latestSearchDate=(searchMetrics||[]).reduce((m:string,x:any)=>x.metric_date>m?x.metric_date:m,"");
   const searchLatest=(searchMetrics||[]).filter((x:any)=>x.metric_date===latestSearchDate);
@@ -226,6 +303,8 @@ Deno.serve(async(req)=>{
     conversionTrendPp:Math.round((conv7-convPrev7)*100)/100,
     topProduct,
     opportunity,
+    targetConversion,
+    conversionOpportunities,
     searchVolume:{
       latestDate:latestSearchDate||null,
       trackedTerms:searchLatest.length,
@@ -243,7 +322,7 @@ Deno.serve(async(req)=>{
   const lastSync=syncs[0]||null;
 
   return new Response(JSON.stringify({
-    ok:true,refreshed,today,
+    ok:true,refreshed,today,returns,
     selectedRange:{from,to,days:daysBetween(from,to),custom:hasRange},
     kpis:{
       revenueToday:revenueRange,ordersToday:rangeOrders.length,
@@ -256,3 +335,4 @@ Deno.serve(async(req)=>{
     products:productRows,visitsSeries,ordersSeries,ordersSeriesRange,competitors,lastSync,lastSuccessfulSync:lastSuccessfulSync[0]||null,businessInsights
   }),{headers:{...cors,"Cache-Control":"no-store"}});
 });
+

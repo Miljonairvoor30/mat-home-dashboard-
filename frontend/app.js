@@ -87,6 +87,7 @@
     $("revenue").textContent=euro.format(d.kpis?.revenueToday||0);
     $("revenueSub").textContent=`${num.format(d.kpis?.ordersToday||0)} bestelling${d.kpis?.ordersToday===1?"":"en"}`;
     $("orders").textContent=num.format(d.kpis?.ordersToday||0);
+    renderReturns(d.returns,label);
     // Bezoeken en conversie staan nu in MAT HOME UPDATE en de MAT Agent.
     const series=d.ordersSeries||[],max=Math.max(1,...series.map(x=>x.orders||0));
     const chartRange=d.ordersSeriesRange;
@@ -98,6 +99,18 @@
     const syncStale=!lastGood?.finished_at||Date.now()-Date.parse(lastGood.finished_at)>15*60000;
     const syncLabel=d.lastSync?.status==="error"?"Synchronisatie mislukt; nieuwe poging volgt":syncStale?"Gegevens wachten op synchronisatie":"Automatisch bijgewerkt";
     $("systemStatus").innerHTML=`<div class="row"><div class="dot"></div><div><b>${num.format(d.kpis?.activeProducts||0)} actieve producten</b><p>${num.format(d.kpis?.totalProducts||0)} producten bekend</p></div></div><div class="row"><div class="dot"></div><div><b>${esc(syncLabel)}</b><p>Laatste geslaagde sync: ${esc(ls)} · elke 5 minuten</p></div></div><div class="row"><div class="dot"></div><div><b>Code onder eigen beheer</b><p>Frontend via GitHub Pages</p></div></div>`;
+  }
+
+  function renderReturns(returns,label){
+    $("returnsPeriodLabel").textContent=`Totale retouren · ${label}`;
+    const available=returns?.available===true&&Number.isFinite(returns.open)&&Number.isFinite(returns.total);
+    $("returnsOpen").textContent=available?num.format(returns.open):"—";
+    $("returnsTotal").textContent=available?num.format(returns.total):"—";
+    const status=$("returnsSyncStatus");
+    status.classList.toggle("returns-warning",!available||returns?.stale===true);
+    if(!available)status.textContent="Retourgegevens tijdelijk niet beschikbaar.";
+    else if(returns.stale)status.textContent=`Verversen niet gelukt · laatste gegevens: ${returns.lastSyncedAt?dateTime(returns.lastSyncedAt):"onbekend"}.`;
+    else status.textContent=`Bijgewerkt ${dateTime(returns.lastSyncedAt)}`;
   }
 
   function trendText(value,suffix="%"){
@@ -410,3 +423,4 @@
   $("productFrom").value=shift(t,-1);$("productTo").value=shift(t,-1);
   if(code()){Promise.all([loadInitial(),loadAgentChat()])}else showLogin();
 })();
+
