@@ -3,20 +3,20 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="theme-color" content="#063a25">
+  <meta name="theme-color" content="#121b3b">
   <meta name="robots" content="noindex,nofollow">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="MAT Home">
-  <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png?v=moneybag-1">
-  <link rel="icon" type="image/png" href="./apple-touch-icon.png?v=moneybag-1">
+  <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png?v=glass-1">
+  <link rel="icon" type="image/svg+xml" href="./mat-home-mark.svg?v=glass-1">
   <title>MAT Home Dashboard</title>
-  <link rel="stylesheet" href="./styles.css?v=returns-1">
+  <link rel="stylesheet" href="./styles.css?v=glass-20261021">
 </head>
 <body>
   <div id="login" class="login-screen">
     <form id="loginForm" class="login-card">
-      <div class="logo">MH</div>
+      <div class="logo logo-mark"><img src="./mat-home-mark.svg" alt="MAT Home"></div>
       <h1>MAT Home</h1>
       <p>Privé dashboard voor je bol.com-business.</p>
       <input id="code" type="password" autocomplete="current-password" placeholder="Dashboardcode" required>
@@ -29,7 +29,7 @@
     <main class="wrap">
       <header class="top">
         <div class="brand">
-          <div class="logo small">MH</div>
+          <div class="logo small logo-mark"><img src="./mat-home-mark.svg" alt=""></div>
           <div><h1>MAT Home Dashboard</h1><div class="sub">Bol.com · bedrijfsbeeld</div></div>
         </div>
         <div class="actions">
@@ -37,10 +37,17 @@
           <button id="refresh" class="btn primary">↻ Ververs Bol-data</button>
         </div>
       </header>
+      <nav class="glass-nav" aria-label="Dashboardnavigatie">
+        <a href="#overview" class="active"><span>⌂</span>Overzicht</a>
+        <a href="#performance"><span>↗</span>Prestaties</a>
+        <a href="#productsSection"><span>▦</span>Producten</a>
+        <a href="#opportunities"><span>◇</span>Kansen</a>
+        <a href="#system"><span>●</span>Status</a>
+      </nav>
 
       <div id="statusBanner" class="banner hidden"></div>
 
-      <section class="period-panel">
+      <section id="overview" class="period-panel">
         <div>
           <b>Dashboardperiode</b>
           <span>Omzet, orders en retouren in de gekozen periode</span>
@@ -91,7 +98,7 @@
         </article>
       </section>
 
-      <section class="card insight-card">
+      <section id="performance" class="card insight-card">
         <div class="insight-top">
           <div>
             <div class="eyebrow">MAT HOME UPDATE</div>
@@ -124,7 +131,7 @@
         <article class="card"><h2>Vandaag</h2><div id="recentOrders"></div></article>
       </section>
 
-      <section class="card">
+      <section id="productsSection" class="card">
         <div class="section-head filter-head">
           <div>
             <h2 id="productPerformanceTitle">Productprestaties · laatste meetdag</h2>
@@ -149,7 +156,7 @@
         <div class="table-scroll"><table><thead><tr><th>Product</th><th>Prijs</th><th>Voorraad</th><th>Bezoeken*</th><th id="productOrdersHeader">Orders gisteren</th></tr></thead><tbody id="products"></tbody></table></div>
       </section>
 
-      <section class="card">
+      <section id="opportunities" class="card">
         <div class="section-head">
           <div>
             <h2>Conversiekansen · laatste 7 dagen</h2>
@@ -170,7 +177,7 @@
         <p class="hint">Alleen listings met minimaal 10 bezoeken in de laatste 7 complete meetdagen worden meegenomen. Dit is een prioriteringssignaal, geen verkoopvoorspelling.</p>
       </section>
 
-      <section class="card">
+      <section id="system" class="card">
         <h2>Status</h2>
         <div id="systemStatus"></div>
       </section>
@@ -179,7 +186,7 @@
     </main>
   </div>
   <script src="./config.js"></script>
-  <script src="./app.js?v=returns-20261016"></script>
+  <script src="./app.js?v=glass-20261021"></script>
 </body>
 </html>
 
